@@ -34,7 +34,7 @@ def main():
     rows = []
     errors = []
 
-    print("Dividend Dip Scanner V1.2")
+    print("Dividend Dip Scanner V1.3")
     print("=" * 75)
 
     for symbol in STOCKS:
@@ -44,6 +44,8 @@ def main():
             print(
                 f"OK   {symbol:5s} | "
                 f"100D DD={row['drawdown_100d']:.1%} | "
+                f"60D DD={row['drawdown_60d']:.1%} | "
+                f"20D DD={row['drawdown_20d']:.1%} | "
                 f"RSI={row['rsi_14']:.1f} | "
                 f"score={row['score']:2d} | {row['signal']}"
             )
