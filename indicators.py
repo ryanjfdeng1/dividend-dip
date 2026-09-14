@@ -11,6 +11,8 @@ def calculate_rsi(close: pd.Series, period: int = RSI_PERIOD) -> float:
     loss = -delta.clip(upper=0)
     avg_gain = gain.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
     avg_loss = loss.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    if avg_loss.iloc[-1] == 0 and avg_gain.iloc[-1] > 0:
+        return 100.0
     rs = avg_gain / avg_loss.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rs))
     value = rsi.iloc[-1]
@@ -25,7 +27,6 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
     dividends = pd.to_numeric(dividends, errors="coerce").fillna(0)
     dates = dividends.index
     end = dates[-1]
-
     last_year = dividends[(dates > end - pd.Timedelta(days=365)) & (dates <= end)].sum()
     prior_year = dividends[
         (dates > end - pd.Timedelta(days=730))
@@ -44,7 +45,6 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
 
 def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None) -> dict:
     close = pd.to_numeric(history["Close"], errors="coerce").dropna()
-
     if len(close) < max(RSI_PERIOD + 1, LOOKBACK_20D):
         raise ValueError(f"Not enough price history: {len(close)} trading days")
 
@@ -81,5 +81,4 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "eps_growth": fundamentals.get("eps_growth", np.nan),
         "fundamental_date": fundamentals.get("fundamental_date"),
     })
-
     return result
