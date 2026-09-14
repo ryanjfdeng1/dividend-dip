@@ -46,8 +46,26 @@ def _value(statement_data: list, aliases: list):
     return None
 
 
+def _request(url: str, params: dict):
+    last = None
+    for attempt in range(4):
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            if response.status_code == 429:
+                last = RuntimeError("Tiingo rate limited (429)")
+                time.sleep(2 ** attempt * 2)
+                continue
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as exc:
+            last = exc
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+    raise last or RuntimeError("Tiingo request failed")
+
+
 def get_fundamentals(symbol: str) -> dict:
-    """Get latest Tiingo fundamentals; unavailable coverage returns gracefully."""
+    """Get latest Tiingo fundamentals with local caching and retry handling."""
     path = _cache_path(symbol)
     payload = None
 
@@ -59,16 +77,12 @@ def get_fundamentals(symbol: str) -> dict:
 
     if payload is None:
         try:
-            response = requests.get(
+            payload = _request(
                 f"{BASE_URL}/{symbol}/statements",
-                params={"token": _token()},
-                timeout=30,
+                {"token": _token()},
             )
-            response.raise_for_status()
-            payload = response.json()
             path.write_text(json.dumps(payload))
-            time.sleep(0.2)
-        except requests.RequestException:
+        except Exception:
             return {"fundamentals_available": False}
 
     if not isinstance(payload, list) or not payload:
@@ -89,19 +103,18 @@ def get_fundamentals(symbol: str) -> dict:
         "revenue_growth": _value(statement_data, ALIASES["revenue_growth"]),
         "eps_growth": _value(statement_data, ALIASES["eps_growth"]),
         "pe": None,
+        "fundamental_date": latest.get("date"),
     }
 
     try:
-        response = requests.get(
+        daily = _request(
             f"{BASE_URL}/{symbol}/daily",
-            params={"token": _token(), "columns": "peRatio"},
-            timeout=30,
+            {"token": _token(), "columns": "date,peRatio"},
         )
-        response.raise_for_status()
-        daily = response.json()
         if isinstance(daily, list) and daily:
-            result["pe"] = daily[-1].get("peRatio")
-    except requests.RequestException:
+            latest_daily = daily[-1]
+            result["pe"] = latest_daily.get("peRatio")
+    except Exception:
         pass
 
     return result
