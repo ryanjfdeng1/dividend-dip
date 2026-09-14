@@ -27,8 +27,6 @@ Total = **100 points**.
 
 ## Drawdown classification
 
-V1.5 also reports the reason for the dip:
-
 - **QUALITY_DIP** — at least 15% below the 100-day high while business quality remains strong
 - **NORMAL_DIP** — a meaningful price decline without enough evidence of high quality
 - **FUNDAMENTAL_RISK** — negative EPS/FCF, severe earnings/revenue decline, or excessive payout
@@ -48,11 +46,7 @@ The staged entry is a research aid, not a trading instruction.
 
 ## Data
 
-V1.5 prefers Tiingo EOD. Tiingo provides raw/adjusted OHLCV, dividends and splits for historical analysis. citeturn0search1
-
-Tiingo currently lists 50 hourly requests and 1,000 daily requests for its free individual plan. Fundamental API access is a separate add-on, and free/evaluation fundamental coverage is limited. citeturn0search0turn0search3
-
-The program uses local caching and retry/backoff for transient 429 errors.
+V1.5 prefers Tiingo EOD. It uses local caching and retry/backoff for transient 429 errors.
 
 Alpha Vantage remains available as a fallback when Tiingo is not configured.
 
