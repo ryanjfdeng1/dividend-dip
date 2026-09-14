@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from pathlib import Path
@@ -13,7 +14,6 @@ ALIASES = {
     "free_cash_flow": ["freeCashFlow"],
     "roe": ["roe", "returnOnEquity"],
     "payout_ratio": ["payoutRatio", "dividendPayoutRatio"],
-    "pe": ["peRatio"],
     "revenue_growth": ["revenueGrowth"],
     "eps_growth": ["epsGrowth"],
 }
@@ -23,13 +23,14 @@ def _token() -> str:
     token = os.getenv("TIINGO_API_KEY")
     if not token:
         raise RuntimeError("TIINGO_API_KEY is not set.")
+    return token
 
 
 def _cache_path(symbol: str) -> Path:
     return CACHE_DIR / f"{symbol.upper()}_fundamentals.json"
 
 
-def _value(statement_data: list, aliases: list[str]):
+def _value(statement_data: list, aliases: list):
     values = {}
     for item in statement_data or []:
         code = item.get("dataCode")
@@ -46,18 +47,13 @@ def _value(statement_data: list, aliases: list[str]):
 
 
 def get_fundamentals(symbol: str) -> dict:
-    """Get the latest available Tiingo fundamental statement.
-
-    Fundamentals are optional. Tiingo currently provides free/evaluation
-    fundamental history for a subset including DOW 30, while broader
-    coverage may require a fundamentals add-on.
-    """
+    """Get the latest available Tiingo fundamental and valuation data."""
     path = _cache_path(symbol)
     payload = None
 
     if path.exists():
         try:
-            payload = __import__("json").loads(path.read_text())
+            payload = json.loads(path.read_text())
         except Exception:
             payload = None
 
@@ -69,7 +65,7 @@ def get_fundamentals(symbol: str) -> dict:
         )
         response.raise_for_status()
         payload = response.json()
-        path.write_text(__import__("json").dumps(payload))
+        path.write_text(json.dumps(payload))
         time.sleep(0.2)
 
     if not isinstance(payload, list) or not payload:
@@ -87,9 +83,23 @@ def get_fundamentals(symbol: str) -> dict:
         "free_cash_flow": _value(statement_data, ALIASES["free_cash_flow"]),
         "roe": _value(statement_data, ALIASES["roe"]),
         "payout_ratio": _value(statement_data, ALIASES["payout_ratio"]),
-        "pe": _value(statement_data, ALIASES["pe"]),
         "revenue_growth": _value(statement_data, ALIASES["revenue_growth"]),
         "eps_growth": _value(statement_data, ALIASES["eps_growth"]),
+        "pe": None,
     }
+
+    # P/E is a daily metric in Tiingo's fundamentals API.
+    try:
+        response = requests.get(
+            f"{BASE_URL}/{symbol}/daily",
+            params={"token": _token(), "columns": "peRatio"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        daily = response.json()
+        if isinstance(daily, list) and daily:
+            result["pe"] = daily[-1].get("peRatio")
+    except requests.RequestException:
+        pass
 
     return result
