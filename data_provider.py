@@ -30,22 +30,49 @@ def _tiingo_key() -> str:
     return key
 
 
-def _get_tiingo_history(symbol: str) -> pd.DataFrame:
+def _read_cache(symbol: str) -> pd.DataFrame:
     path = _cache_path(symbol)
-    if path.exists():
+    if not path.exists():
+        return pd.DataFrame()
+    try:
         df = pd.read_csv(path, parse_dates=["Date"], index_col="Date")
-        if len(df) >= 200:
-            return df.sort_index()
+        return df.sort_index()
+    except Exception:
+        return pd.DataFrame()
 
+
+def _request_tiingo(symbol: str):
     start = date.today() - timedelta(days=800)
-    response = requests.get(
-        f"{TIINGO_URL}/{symbol}/prices",
-        params={"startDate": start.isoformat(), "token": _tiingo_key()},
-        timeout=30,
-    )
-    response.raise_for_status()
-    payload = response.json()
+    last = None
+    for attempt in range(4):
+        try:
+            response = requests.get(
+                f"{TIINGO_URL}/{symbol}/prices",
+                params={"startDate": start.isoformat(), "token": _tiingo_key()},
+                timeout=30,
+            )
+            if response.status_code == 429:
+                last = RuntimeError(f"Tiingo rate limited (429) for {symbol}")
+                time.sleep(2 ** attempt * 2)
+                continue
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as exc:
+            last = exc
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+    raise last or RuntimeError(f"Tiingo request failed for {symbol}")
 
+
+def _get_tiingo_history(symbol: str) -> pd.DataFrame:
+    cached = _read_cache(symbol)
+
+    # Refresh when the cache does not contain a recent trading-day observation.
+    today = pd.Timestamp(date.today())
+    if not cached.empty and cached.index.max() >= today - pd.Timedelta(days=4) and len(cached) >= 200:
+        return cached
+
+    payload = _request_tiingo(symbol)
     if not isinstance(payload, list) or not payload:
         raise RuntimeError(f"No Tiingo daily data returned for {symbol}")
 
@@ -65,17 +92,15 @@ def _get_tiingo_history(symbol: str) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.set_index("Date").sort_index()
-    df.to_csv(path)
-    time.sleep(0.2)
+    df.to_csv(_cache_path(symbol))
+    time.sleep(0.25)
     return df
 
 
 def _get_alpha_history(symbol: str) -> pd.DataFrame:
-    path = _cache_path(symbol)
-    if path.exists():
-        df = pd.read_csv(path, parse_dates=["Date"], index_col="Date")
-        if not df.empty:
-            return df.sort_index()
+    cached = _read_cache(symbol)
+    if not cached.empty:
+        return cached
 
     params = {
         "function": "TIME_SERIES_DAILY",
@@ -110,13 +135,13 @@ def _get_alpha_history(symbol: str) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.set_index("Date").sort_index()
-    df.to_csv(path)
+    df.to_csv(_cache_path(symbol))
     time.sleep(1.2)
     return df
 
 
 def get_daily_history(symbol: str, use_cache: bool = True) -> pd.DataFrame:
-    """Prefer Tiingo for V1.4; keep Alpha Vantage as a fallback."""
+    """Prefer Tiingo; use cached data and retry on transient rate limits."""
     if os.getenv("TIINGO_API_KEY"):
         return _get_tiingo_history(symbol)
     return _get_alpha_history(symbol)
