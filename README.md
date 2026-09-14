@@ -1,60 +1,57 @@
-# Dividend Dip V1.2
+# Dividend Dip V1.4
 
-Manual dividend-stock dip scanner.
+Manual dividend-stock dip scanner for long-term investors.
+
+## What V1.4 does
+
+V1.4 ranks a stock from 0-100 using five components:
+
+- **Dip Score (0-30):** 100D/60D/20D drawdowns + RSI
+- **Dividend Score (0-20):** trailing dividend yield + dividend growth
+- **Quality Score (0-30):** EPS, free cash flow, ROE, payout ratio and growth
+- **Valuation Score (0-10):** P/E
+- **Trend Score (0-10):** price vs 200DMA
+
+Signals:
+
+- **70+** → STRONG BUY CANDIDATE
+- **55-69** → BUY CANDIDATE
+- **40-54** → WATCH
+- **<40** → HOLD
+
+If fundamental data is unavailable, the scanner reports **DATA INCOMPLETE** rather than pretending that the stock is investable.
 
 ## Data source
 
-V1.2 uses Alpha Vantage's official `TIME_SERIES_DAILY` endpoint with the free/compact daily data window.
+V1.4 prefers **Tiingo EOD** when TIINGO_API_KEY is configured. Tiingo provides adjusted and raw prices plus dividend cash distributions, which lets the scanner calculate dividend yield/growth and a true 200DMA when enough history is available.
 
-Because the compact response is only about 100 trading days, V1.2 temporarily uses:
+Tiingo fundamentals are optional because fundamental coverage depends on the account/entitlement. The scanner falls back gracefully when a ticker has no fundamental access.
 
-- 100-day high instead of 52-week high
-- 60-day high
-- 20-day high
-
-A true 200-day moving average is calculated only if sufficient history is available; with the free compact response it will normally be unavailable.
+Alpha Vantage remains supported as a fallback for price history when only ALPHAVANTAGE_API_KEY is configured.
 
 ## Setup
 
-Create `.env`:
+Create .env locally:
 
-```text
-ALPHAVANTAGE_API_KEY=YOUR_KEY
-```
+TIINGO_API_KEY=YOUR_TIINGO_TOKEN
+ALPHAVANTAGE_API_KEY=YOUR_ALPHA_VANTAGE_KEY
 
-Never commit `.env` to GitHub. It is already included in `.gitignore`.
+For V1.4, Tiingo is recommended.
+
+Never commit .env to GitHub. It is already included in .gitignore.
 
 ## Run
 
-```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 python scanner.py
-```
 
-The first run downloads each ticker and saves it under `data/`.
-Later runs reuse the local cache.
+The scanner caches price and fundamental responses under data/ to reduce repeated API calls.
 
-## Signals
+## Important
 
-Initial research rules:
+The score is a research heuristic, **not a validated investment strategy**. A high score does not mean a stock will rise.
 
-- 10%+ pullback → WATCH
-- 15%+ pullback → BUY CANDIDATE
-- 20%+ pullback → STRONG BUY CANDIDATE
-
-These thresholds are hypotheses, not validated investment rules.
-
-## Next version
-
-V2 should add:
-- reliable dividend yield/history
-- EPS growth
-- free cash flow
-- payout ratio
-- debt/EBITDA
-- valuation
-- dividend-cut detection
-- historical backtesting
+The next major upgrade should be **historical backtesting**: measure how stocks scoring 55/70/80+ actually performed after 1, 3, 6 and 12 months, including dividends.
 
 No automatic trading is implemented.
