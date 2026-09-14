@@ -20,7 +20,11 @@ def scan_one(symbol: str) -> dict:
     data["ticker"] = symbol
     data["date"] = datetime.now().date().isoformat()
 
-    total, signal, dip, dividend, quality, valuation, trend = score_stock(data)
+    (
+        total, signal, dip, dividend, quality, valuation, trend,
+        dip_type, buy_stage, risk_flags
+    ) = score_stock(data)
+
     data.update({
         "score": total,
         "signal": signal,
@@ -29,8 +33,17 @@ def scan_one(symbol: str) -> dict:
         "quality_score": quality,
         "valuation_score": valuation,
         "trend_score": trend,
+        "dip_type": dip_type,
+        "buy_stage": buy_stage,
+        "risk_flags": risk_flags,
     })
     return data
+
+
+def _fmt(value, digits=1):
+    if pd.isna(value):
+        return "N/A"
+    return f"{value:.{digits}f}"
 
 
 def main():
@@ -42,10 +55,10 @@ def main():
 
     rows = []
     errors = []
-
     provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
-    print(f"Dividend Dip Scanner V1.4 | Data: {provider}")
-    print("=" * 100)
+
+    print(f"Dividend Dip Scanner V1.5 | Data: {provider}")
+    print("=" * 120)
 
     for symbol in STOCKS:
         try:
@@ -53,13 +66,13 @@ def main():
             rows.append(row)
             print(
                 f"OK   {symbol:5s} | "
-                f"DD100={row['drawdown_100d']:.1%} | "
-                f"RSI={row['rsi_14']:.1f} | "
-                f"Yield={row['dividend_yield']:.2%} | "
-                f"Score={row['score']:3d} "
-                f"(D{row['dip_score']:02d}+Div{row['dividend_score']:02d}+"
-                f"Q{row['quality_score']:02d}+V{row['valuation_score']:02d}+"
-                f"T{row['trend_score']:02d}) | {row['signal']}"
+                f"DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | "
+                f"RSI={_fmt(row['rsi_14']):>5s} | "
+                f"Yield={_fmt(row['dividend_yield'] * 100, 2):>5s}% | "
+                f"PE={_fmt(row['pe']):>5s} | "
+                f"Score={row['score']:3d} | "
+                f"{row['dip_type']:<16s} | "
+                f"{row['buy_stage']:<15s} | {row['signal']}"
             )
         except Exception as exc:
             errors.append({"ticker": symbol, "error": str(exc)})
@@ -74,17 +87,19 @@ def main():
     )
 
     columns = [
-        "ticker", "price", "drawdown_100d", "drawdown_60d", "drawdown_20d",
-        "sma_200", "above_200dma", "rsi_14",
+        "ticker", "price", "high_100d", "drawdown_100d", "drawdown_60d",
+        "drawdown_20d", "sma_200", "above_200dma", "rsi_14",
         "dividend_yield", "dividend_growth",
         "eps", "free_cash_flow", "roe", "payout_ratio", "pe",
+        "revenue_growth", "eps_growth", "fundamental_date",
         "dip_score", "dividend_score", "quality_score",
-        "valuation_score", "trend_score", "score", "signal",
+        "valuation_score", "trend_score", "score",
+        "dip_type", "buy_stage", "risk_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
     print("\nResults")
-    print("-" * 160)
+    print("-" * 180)
     print(df[columns].to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
     df.to_csv("scan_results.csv", index=False)
