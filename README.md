@@ -1,39 +1,52 @@
-# Dividend Dip V1.5
+# Quality Dip Scanner V1.6
 
-Manual dividend-stock dip scanner for long-term investors.
+A manual research scanner for finding high-quality US companies after meaningful price drawdowns.
 
-## V1.5 objective
+## Strategy
 
-V1.5 focuses on finding a **quality dip**, not simply the stock with the largest decline.
+V1.6 is no longer a high-dividend strategy.
 
-The model combines:
+The core idea is:
 
-- **Dip Score (0-30):** 100D/60D drawdown + RSI
-- **Dividend Score (0-15):** yield + dividend growth, with a payout penalty
-- **Quality Score (0-30):** EPS, free cash flow, ROE, revenue growth, EPS growth and payout
-- **Valuation Score (0-15):** P/E
-- **Trend Score (0-10):** price versus 200DMA
+> Quality company + reasonable valuation + meaningful dip = candidate
 
-Total = **100 points**.
+Dividend yield is only a small optional bonus. A low-yield quality growth stock can score highly if its fundamentals and valuation are strong.
 
-## V1.5 signals
+## Universe
 
-- **70+** → STRONG BUY CANDIDATE
-- **55-69** → BUY CANDIDATE
-- **40-54** → WATCH
-- **<40** → HOLD
-- Missing fundamentals → **DATA INCOMPLETE**
-- Major fundamental deterioration → **RISK / PASS**
+The default universe is a curated list of about 120 established US large-cap companies across technology, communication, financials, healthcare, consumer, industrials, energy, materials, utilities and REITs.
 
-## Drawdown classification
+The universe is deliberately broad. It is a research universe, not a claim that every stock is high quality.
 
-- **QUALITY_DIP** — at least 15% below the 100-day high while business quality remains strong
-- **NORMAL_DIP** — a meaningful price decline without enough evidence of high quality
-- **FUNDAMENTAL_RISK** — negative EPS/FCF, severe earnings/revenue decline, or excessive payout
-- **UNKNOWN** — fundamentals unavailable
-- **NO_DIP** — less than 10% below the 100-day high
+## V1.6 score
 
-## Staged entry
+| Component | Weight | Purpose |
+|---|---:|---|
+| Quality | 45 | Profitability, cash flow and growth |
+| Valuation | 20 | Avoid buying an expensive dip |
+| Dip | 30 | Identify meaningful drawdowns |
+| Dividend | 5 | Optional shareholder-return bonus |
+| Total | 100 | |
+
+Quality uses EPS, free cash flow, ROE, revenue growth, EPS growth and payout ratio when available.
+
+Valuation currently uses P/E. Negative or extreme P/E receives no valuation points.
+
+Dip uses 100-day, 60-day and 20-day drawdowns plus RSI(14).
+
+Dividend yield and dividend growth are a small bonus, not a requirement.
+
+## Signals
+
+- 75+ → STRONG BUY CANDIDATE
+- 60-74 → BUY CANDIDATE
+- 45-59 → WATCH
+- <45 → HOLD
+- Missing fundamentals → DATA INCOMPLETE
+- Major deterioration → RISK / PASS
+- Less than 10% below 100-day high → NO DIP
+
+## Dip stages
 
 - <10% → OBSERVE
 - 10-15% → WATCH_10%
@@ -42,22 +55,24 @@ Total = **100 points**.
 - 25-30% → BUY_3
 - 30%+ → DEEP_DIP_REVIEW
 
-The staged entry is a research aid, not a trading instruction.
+These are research labels, not automatic trading instructions.
 
 ## Data
 
-V1.5 prefers Tiingo EOD. It uses local caching and retry/backoff for transient 429 errors.
+Tiingo is preferred for EOD price data when TIINGO_API_KEY is configured. Local caching and retry/backoff reduce unnecessary API requests.
 
-Alpha Vantage remains available as a fallback when Tiingo is not configured.
+Alpha Vantage remains available as a fallback.
+
+Fundamental coverage depends on the Tiingo account/API entitlement. If fundamentals cannot be verified, the scanner deliberately avoids issuing a BUY signal.
 
 ## Setup
 
-Create `.env` locally:
+Create .env locally:
 
 TIINGO_API_KEY=YOUR_TIINGO_TOKEN
 ALPHAVANTAGE_API_KEY=YOUR_ALPHA_VANTAGE_KEY
 
-Do not commit `.env`.
+Never commit .env.
 
 ## Run
 
@@ -67,14 +82,16 @@ python scanner.py
 
 Outputs:
 
-- `scan_results.csv`
-- `scan_errors.csv` when symbols fail
-- cached price/fundamental data under `data/`
+- scan_results.csv
+- scan_errors.csv when symbols fail
+- cached data under data/
 
-## Important
+## Next step: V1.7 backtest
 
-The score is a research heuristic, **not a validated investment strategy**. A high score does not mean a stock will rise.
+Before treating the score as an investment signal, test it historically.
 
-The next major upgrade is **V1.6 historical backtesting**: test whether 55+, 70+ and QUALITY_DIP signals actually outperform after 1, 3, 6 and 12 months, including dividends.
+The preferred next upgrade is to measure forward 1M / 3M / 6M / 12M total returns for score >= 60, score >= 75, QUALITY_DIP, and different drawdown levels.
+
+This will tell us whether the scoring model has genuine predictive value rather than merely looking sensible.
 
 No automatic trading is implemented.
