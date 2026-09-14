@@ -55,19 +55,25 @@ def main():
     rows, errors = [], []
     provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V1.6 | {len(STOCKS)} stocks | Data: {provider}")
+    print(f"Quality Dip Scanner V1.6.1 | {len(STOCKS)} stocks | Data: {provider}")
+    print("Price cache: refresh at most once per trading day")
+    print("Fundamental cache: refresh every 30 days")
     print("=" * 145)
 
     for symbol in STOCKS:
         try:
             row = scan_one(symbol)
             rows.append(row)
+            fundamental_status = row.get("fundamentals_error", "")
+            if fundamental_status:
+                fundamental_status = f" | {fundamental_status[:45]}"
+
             print(
                 f"OK   {symbol:5s} | DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | "
                 f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | "
                 f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/20 | "
                 f"D={row['dip_score']:2d}/30 | Div={row['dividend_score']:1d}/5 | "
-                f"Score={row['score']:3d} | {row['signal']}"
+                f"Score={row['score']:3d} | {row['signal']}{fundamental_status}"
             )
         except Exception as exc:
             errors.append({"ticker": symbol, "error": str(exc)})
@@ -86,8 +92,9 @@ def main():
         "drawdown_20d", "sma_200", "above_200dma", "rsi_14",
         "eps", "free_cash_flow", "roe", "payout_ratio", "pe",
         "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
-        "fundamental_date", "quality_score", "valuation_score", "dip_score",
-        "dividend_score", "score", "dip_type", "buy_stage", "risk_flags", "signal",
+        "fundamental_date", "fundamentals_source", "fundamentals_error",
+        "quality_score", "valuation_score", "dip_score", "dividend_score",
+        "score", "dip_type", "buy_stage", "risk_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
