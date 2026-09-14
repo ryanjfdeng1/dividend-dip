@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Optional
 
 from config import LOOKBACK_DAYS, LOOKBACK_60D, LOOKBACK_20D, SMA_LONG, RSI_PERIOD
 
@@ -40,7 +41,7 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
     }
 
 
-def calculate_metrics(history: pd.DataFrame, fundamentals: dict | None = None) -> dict:
+def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None) -> dict:
     close = history["Close"].dropna()
 
     if len(close) < RSI_PERIOD + 1:
