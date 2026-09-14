@@ -25,6 +25,7 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
     dividends = pd.to_numeric(dividends, errors="coerce").fillna(0)
     dates = dividends.index
     end = dates[-1]
+
     last_year = dividends[(dates > end - pd.Timedelta(days=365)) & (dates <= end)].sum()
     prior_year = dividends[
         (dates > end - pd.Timedelta(days=730))
@@ -42,9 +43,9 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
 
 
 def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None) -> dict:
-    close = history["Close"].dropna()
+    close = pd.to_numeric(history["Close"], errors="coerce").dropna()
 
-    if len(close) < RSI_PERIOD + 1:
+    if len(close) < max(RSI_PERIOD + 1, LOOKBACK_20D):
         raise ValueError(f"Not enough price history: {len(close)} trading days")
 
     current = float(close.iloc[-1])
@@ -68,18 +69,17 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         **calculate_dividend_metrics(history, current),
     }
 
-    if fundamentals:
-        result.update({
-            "fundamentals_available": fundamentals.get("fundamentals_available", False),
-            "eps": fundamentals.get("eps", np.nan),
-            "free_cash_flow": fundamentals.get("free_cash_flow", np.nan),
-            "roe": fundamentals.get("roe", np.nan),
-            "payout_ratio": fundamentals.get("payout_ratio", np.nan),
-            "pe": fundamentals.get("pe", np.nan),
-            "revenue_growth": fundamentals.get("revenue_growth", np.nan),
-            "eps_growth": fundamentals.get("eps_growth", np.nan),
-        })
-    else:
-        result["fundamentals_available"] = False
+    fundamentals = fundamentals or {}
+    result.update({
+        "fundamentals_available": bool(fundamentals.get("fundamentals_available")),
+        "eps": fundamentals.get("eps", np.nan),
+        "free_cash_flow": fundamentals.get("free_cash_flow", np.nan),
+        "roe": fundamentals.get("roe", np.nan),
+        "payout_ratio": fundamentals.get("payout_ratio", np.nan),
+        "pe": fundamentals.get("pe", np.nan),
+        "revenue_growth": fundamentals.get("revenue_growth", np.nan),
+        "eps_growth": fundamentals.get("eps_growth", np.nan),
+        "fundamental_date": fundamentals.get("fundamental_date"),
+    })
 
     return result
