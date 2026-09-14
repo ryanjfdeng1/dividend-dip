@@ -47,7 +47,7 @@ def _value(statement_data: list, aliases: list):
 
 
 def get_fundamentals(symbol: str) -> dict:
-    """Get the latest available Tiingo fundamental and valuation data."""
+    """Get latest Tiingo fundamentals; unavailable coverage returns gracefully."""
     path = _cache_path(symbol)
     payload = None
 
@@ -58,15 +58,18 @@ def get_fundamentals(symbol: str) -> dict:
             payload = None
 
     if payload is None:
-        response = requests.get(
-            f"{BASE_URL}/{symbol}/statements",
-            params={"token": _token()},
-            timeout=30,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        path.write_text(json.dumps(payload))
-        time.sleep(0.2)
+        try:
+            response = requests.get(
+                f"{BASE_URL}/{symbol}/statements",
+                params={"token": _token()},
+                timeout=30,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            path.write_text(json.dumps(payload))
+            time.sleep(0.2)
+        except requests.RequestException:
+            return {"fundamentals_available": False}
 
     if not isinstance(payload, list) or not payload:
         return {"fundamentals_available": False}
@@ -88,7 +91,6 @@ def get_fundamentals(symbol: str) -> dict:
         "pe": None,
     }
 
-    # P/E is a daily metric in Tiingo's fundamentals API.
     try:
         response = requests.get(
             f"{BASE_URL}/{symbol}/daily",
