@@ -1,7 +1,8 @@
+import json
 import os
 import time
-from pathlib import Path
 from datetime import date, timedelta
+from pathlib import Path
 
 import pandas as pd
 import requests
@@ -10,6 +11,11 @@ ALPHA_URL = "https://www.alphavantage.co/query"
 TIINGO_URL = "https://api.tiingo.com/tiingo/daily"
 CACHE_DIR = Path("data")
 CACHE_DIR.mkdir(exist_ok=True)
+
+# Keep a safety margin below Tiingo Starter's published 50 requests/hour.
+# See: https://www.tiingo.com/account/billing/pricing
+TIINGO_HOURLY_BUDGET = int(os.getenv("TIINGO_HOURLY_BUDGET", "45"))
+RATE_STATE = CACHE_DIR / ".tiingo_rate_state.json"
 
 
 def _cache_path(symbol: str) -> Path:
@@ -41,35 +47,59 @@ def _read_cache(symbol: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _load_rate_state() -> dict:
+    try:
+        state = json.loads(RATE_STATE.read_text())
+        if state.get("hour") == int(time.time() // 3600):
+            return state
+    except Exception:
+        pass
+    return {"hour": int(time.time() // 3600), "requests": 0}
+
+
+def _consume_tiingo_request() -> None:
+    state = _load_rate_state()
+    if state["requests"] >= TIINGO_HOURLY_BUDGET:
+        raise RuntimeError(
+            f"Tiingo hourly safety budget reached ({TIINGO_HOURLY_BUDGET}). "
+            "Cached data will still be used; rerun after the next hour."
+        )
+    state["requests"] += 1
+    RATE_STATE.write_text(json.dumps(state))
+
+
 def _request_tiingo(symbol: str):
     start = date.today() - timedelta(days=800)
-    last = None
-    for attempt in range(4):
-        try:
-            response = requests.get(
-                f"{TIINGO_URL}/{symbol}/prices",
-                params={"startDate": start.isoformat(), "token": _tiingo_key()},
-                timeout=30,
-            )
-            if response.status_code == 429:
-                last = RuntimeError(f"Tiingo rate limited (429) for {symbol}")
-                time.sleep(2 ** attempt * 2)
-                continue
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as exc:
-            last = exc
-            if attempt < 3:
-                time.sleep(2 ** attempt)
-    raise last or RuntimeError(f"Tiingo request failed for {symbol}")
+    _consume_tiingo_request()
+
+    try:
+        response = requests.get(
+            f"{TIINGO_URL}/{symbol}/prices",
+            params={
+                "startDate": start.isoformat(),
+                "token": _tiingo_key(),
+                "format": "json",
+            },
+            timeout=30,
+        )
+        if response.status_code == 429:
+            raise RuntimeError(f"Tiingo rate limited (429) for {symbol}")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Tiingo request failed for {symbol}: {exc}") from exc
 
 
 def _get_tiingo_history(symbol: str) -> pd.DataFrame:
     cached = _read_cache(symbol)
 
-    # Refresh when the cache does not contain a recent trading-day observation.
+    # Price history is refreshed at most once per trading day.
     today = pd.Timestamp(date.today())
-    if not cached.empty and cached.index.max() >= today - pd.Timedelta(days=4) and len(cached) >= 200:
+    if (
+        not cached.empty
+        and cached.index.max() >= today - pd.Timedelta(days=4)
+        and len(cached) >= 200
+    ):
         return cached
 
     payload = _request_tiingo(symbol)
@@ -93,7 +123,6 @@ def _get_tiingo_history(symbol: str) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.set_index("Date").sort_index()
     df.to_csv(_cache_path(symbol))
-    time.sleep(0.25)
     return df
 
 
@@ -141,7 +170,7 @@ def _get_alpha_history(symbol: str) -> pd.DataFrame:
 
 
 def get_daily_history(symbol: str, use_cache: bool = True) -> pd.DataFrame:
-    """Prefer Tiingo; use cached data and retry on transient rate limits."""
+    """Prefer Tiingo and persist a local request budget/cache."""
     if os.getenv("TIINGO_API_KEY"):
         return _get_tiingo_history(symbol)
     return _get_alpha_history(symbol)
