@@ -12,7 +12,7 @@ def _num(value):
 
 
 def score_stock(row: dict) -> tuple:
-    """V1.8 Quality Dip score. Maximum 100: Quality 45, Valuation 20, Dip 30, Dividend 5."""
+    """V1.9 Quality Dip score. Maximum 100: Quality 45, Valuation 30, Dip 20, Dividend 5."""
     eps = _num(row.get("eps"))
     fcf = _num(row.get("free_cash_flow"))
     symbol = str(row.get("ticker", "")).upper()
@@ -23,6 +23,7 @@ def score_stock(row: dict) -> tuple:
     eps_growth = _num(row.get("eps_growth"))
     payout = _num(row.get("payout_ratio"))
     pe = _num(row.get("pe"))
+    fcf_yield = _num(row.get("fcf_yield"))
     data_quality = row.get("data_quality")
     fundamental_age = _num(row.get("fundamental_age_days"))
     dd100 = _num(row.get("drawdown_100d"))
@@ -50,14 +51,29 @@ def score_stock(row: dict) -> tuple:
     if payout is not None and 0 <= payout <= 0.70: quality += 3
     quality = min(45, quality)
 
+    # V1.9: valuation gets 30 points. Non-financials use PE + FCF yield;
+    # financials use PE only because industrial FCF yield is not meaningful.
     valuation = 0
     if pe is not None and pe > 0:
-        if pe <= 12: valuation = 20
-        elif pe <= 15: valuation = 17
-        elif pe <= 18: valuation = 14
-        elif pe <= 22: valuation = 11
-        elif pe <= 27: valuation = 7
-        elif pe <= 35: valuation = 3
+        if pe <= 12: valuation += 15
+        elif pe <= 15: valuation += 13
+        elif pe <= 18: valuation += 11
+        elif pe <= 22: valuation += 9
+        elif pe <= 27: valuation += 6
+        elif pe <= 35: valuation += 3
+
+    if is_financial:
+        # Give financials the full valuation weight through PE/PB-style
+        # earnings valuation rather than a misleading FCF yield.
+        valuation = min(30, valuation * 2)
+    elif fcf_yield is not None and fcf_yield > 0:
+        if fcf_yield >= 0.08: valuation += 15
+        elif fcf_yield >= 0.06: valuation += 13
+        elif fcf_yield >= 0.05: valuation += 11
+        elif fcf_yield >= 0.04: valuation += 9
+        elif fcf_yield >= 0.03: valuation += 6
+        elif fcf_yield >= 0.02: valuation += 3
+    valuation = min(30, valuation)
 
     dip = 0
     if dd100 is not None:
@@ -75,7 +91,7 @@ def score_stock(row: dict) -> tuple:
         if rsi <= 30: dip += 8
         elif rsi <= 35: dip += 6
         elif rsi <= 40: dip += 3
-    dip = min(30, dip)
+    dip = min(20, round(dip * 20 / 30))
 
     dividend = 0
     if yield_ is not None:
