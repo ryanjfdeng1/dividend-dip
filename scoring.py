@@ -10,14 +10,7 @@ def _num(value):
 
 
 def score_stock(row: dict) -> tuple:
-    """V1.8 Quality Dip score.
-
-    Maximum = 100:
-      Quality 45, Valuation 20, Dip 30, Dividend 5.
-
-    Dividend is an optional bonus; a low-yield company can still score highly.
-    Missing fundamentals prevent a BUY signal because quality cannot be verified.
-    """
+    """V1.8 Quality Dip score. Maximum 100: Quality 45, Valuation 20, Dip 30, Dividend 5."""
     eps = _num(row.get("eps"))
     fcf = _num(row.get("free_cash_flow"))
     roe = _num(row.get("roe"))
@@ -29,39 +22,29 @@ def score_stock(row: dict) -> tuple:
     fundamental_age = _num(row.get("fundamental_age_days"))
     dd100 = _num(row.get("drawdown_100d"))
     dd60 = _num(row.get("drawdown_60d"))
-    dd20 = _num(row.get("drawdown_20d"))
     rsi = _num(row.get("rsi_14"))
     yield_ = _num(row.get("dividend_yield"))
     div_growth = _num(row.get("dividend_growth"))
 
-    # Quality: 45
     quality = 0
-    if eps is not None:
-        quality += 7 if eps > 0 else 0
-    if fcf is not None:
-        quality += 8 if fcf > 0 else 0
-
+    if eps is not None and eps > 0: quality += 7
+    if fcf is not None and fcf > 0: quality += 8
     if roe is not None:
         if roe >= 0.25: quality += 10
         elif roe >= 0.20: quality += 8
         elif roe >= 0.15: quality += 6
         elif roe >= 0.10: quality += 3
-
     if revenue_growth is not None:
         if revenue_growth >= 0.10: quality += 7
         elif revenue_growth >= 0.05: quality += 6
         elif revenue_growth >= 0: quality += 3
-
     if eps_growth is not None:
         if eps_growth >= 0.10: quality += 7
         elif eps_growth >= 0.05: quality += 6
         elif eps_growth >= 0: quality += 3
-
-    if payout is not None and 0 <= payout <= 0.70:
-        quality += 3
+    if payout is not None and 0 <= payout <= 0.70: quality += 3
     quality = min(45, quality)
 
-    # Valuation: 20. Low P/E is useful, but avoid rewarding negative/extreme P/E.
     valuation = 0
     if pe is not None and pe > 0:
         if pe <= 12: valuation = 20
@@ -71,7 +54,6 @@ def score_stock(row: dict) -> tuple:
         elif pe <= 27: valuation = 7
         elif pe <= 35: valuation = 3
 
-    # Dip: 30. Depth is combined with evidence of short-term selling pressure.
     dip = 0
     if dd100 is not None:
         if dd100 <= -0.30: dip += 15
@@ -79,42 +61,45 @@ def score_stock(row: dict) -> tuple:
         elif dd100 <= -0.20: dip += 12
         elif dd100 <= -0.15: dip += 9
         elif dd100 <= -0.10: dip += 6
-
     if dd60 is not None:
         if dd60 <= -0.20: dip += 7
         elif dd60 <= -0.15: dip += 6
         elif dd60 <= -0.10: dip += 4
         elif dd60 <= -0.05: dip += 2
-
     if rsi is not None:
         if rsi <= 30: dip += 8
         elif rsi <= 35: dip += 6
         elif rsi <= 40: dip += 3
     dip = min(30, dip)
 
-    # Dividend: 5-point bonus only.
     dividend = 0
     if yield_ is not None:
         if yield_ >= 0.04: dividend += 2
         elif yield_ >= 0.02: dividend += 1
-    if div_growth is not None and div_growth >= 0.05:
-        dividend += 2
-    elif div_growth is not None and div_growth >= 0:
-        dividend += 1
+    if div_growth is not None:
+        if div_growth >= 0.05: dividend += 2
+        elif div_growth >= 0: dividend += 1
     dividend = min(5, dividend)
 
-    # Freshness guard: verified fundamentals must be current enough to support a BUY.\n    if fundamental_age is not None and fundamental_age > 450:\n        quality = 0\n        valuation = 0\n    total = min(100, quality + valuation + dip + dividend)
+    fundamentals_verified = bool(row.get("fundamentals_available")) and data_quality in ("A", "B")
+    if fundamental_age is not None and fundamental_age > 450:
+        fundamentals_verified = False
+        quality = 0
+        valuation = 0
 
-    fundamentals_available = bool(row.get("fundamentals_available"))
+    total = min(100, quality + valuation + dip + dividend)
+
     risk_flags = []
-    if fundamentals_available:
+    if fundamentals_verified:
         if eps is not None and eps <= 0: risk_flags.append("NEGATIVE_EPS")
         if fcf is not None and fcf <= 0: risk_flags.append("NEGATIVE_FCF")
         if payout is not None and payout > 1.0: risk_flags.append("PAYOUT_GT_100")
         if eps_growth is not None and eps_growth < -0.10: risk_flags.append("EPS_DECLINE")
         if revenue_growth is not None and revenue_growth < -0.10: risk_flags.append("REVENUE_DECLINE")
+    if fundamental_age is not None and fundamental_age > 450:
+        risk_flags.append("STALE_FUNDAMENTALS")
 
-    if not fundamentals_available:
+    if not fundamentals_verified:
         dip_type = "UNKNOWN"
     elif risk_flags:
         dip_type = "FUNDAMENTAL_RISK"
@@ -125,20 +110,14 @@ def score_stock(row: dict) -> tuple:
     else:
         dip_type = "NO_DIP"
 
-    if dd100 is None or dd100 > -0.10:
-        buy_stage = "OBSERVE"
-    elif dd100 > -0.15:
-        buy_stage = "WATCH_10%"
-    elif dd100 > -0.20:
-        buy_stage = "BUY_1"
-    elif dd100 > -0.25:
-        buy_stage = "BUY_2"
-    elif dd100 > -0.30:
-        buy_stage = "BUY_3"
-    else:
-        buy_stage = "DEEP_DIP_REVIEW"
+    if dd100 is None or dd100 > -0.10: buy_stage = "OBSERVE"
+    elif dd100 > -0.15: buy_stage = "WATCH_10%"
+    elif dd100 > -0.20: buy_stage = "BUY_1"
+    elif dd100 > -0.25: buy_stage = "BUY_2"
+    elif dd100 > -0.30: buy_stage = "BUY_3"
+    else: buy_stage = "DEEP_DIP_REVIEW"
 
-    if not fundamentals_available:
+    if not fundamentals_verified:
         signal = "DATA INCOMPLETE"
     elif dip_type == "FUNDAMENTAL_RISK":
         signal = "RISK / PASS"
@@ -153,7 +132,4 @@ def score_stock(row: dict) -> tuple:
     else:
         signal = "HOLD"
 
-    return (
-        total, signal, dip, dividend, quality, valuation,
-        dip_type, buy_stage, ",".join(risk_flags)
-    )
+    return (total, signal, dip, dividend, quality, valuation, dip_type, buy_stage, ",".join(risk_flags))
