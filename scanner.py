@@ -6,16 +6,43 @@ from dotenv import load_dotenv
 
 from config import STOCKS
 from data_provider import get_daily_history
-from fundamentals import get_fundamentals
+from fundamentals import get_fundamentals as get_tiingo_fundamentals
+from sec_fundamentals import get_sec_fundamentals
 from indicators import calculate_metrics
 from scoring import score_stock
 
 load_dotenv()
 
 
+def _has_usable_fundamentals(data: dict) -> bool:
+    return bool(data.get("fundamentals_available")) and (
+        data.get("eps") is not None
+        or data.get("free_cash_flow") is not None
+        or data.get("revenue") is not None
+    )
+
+
+def get_fundamentals(symbol: str) -> dict:
+    # V1.7: SEC XBRL is the primary source and requires no API key.
+    sec = get_sec_fundamentals(symbol)
+    if _has_usable_fundamentals(sec):
+        return sec
+
+    # Keep Tiingo as a fallback for accounts that already have Fundamentals
+    # access. This prevents a temporary SEC/API problem from blocking a scan.
+    if os.getenv("TIINGO_API_KEY"):
+        tiingo = get_tiingo_fundamentals(symbol)
+        if _has_usable_fundamentals(tiingo):
+            tiingo["data_quality"] = "B"
+            return tiingo
+
+    sec["data_quality"] = sec.get("data_quality", "D")
+    return sec
+
+
 def scan_one(symbol: str) -> dict:
     history = get_daily_history(symbol, use_cache=True)
-    fundamentals = get_fundamentals(symbol) if os.getenv("TIINGO_API_KEY") else {}
+    fundamentals = get_fundamentals(symbol)
     data = calculate_metrics(history, fundamentals)
     data["ticker"] = symbol
     data["date"] = datetime.now().date().isoformat()
@@ -48,23 +75,27 @@ def _fmt(value, digits=1):
 def main():
     if not os.getenv("TIINGO_API_KEY") and not os.getenv("ALPHAVANTAGE_API_KEY"):
         raise RuntimeError(
-            "Missing API key. Set TIINGO_API_KEY (recommended) or "
+            "Missing price-data API key. Set TIINGO_API_KEY or "
             "ALPHAVANTAGE_API_KEY in .env."
         )
 
     rows, errors = [], []
-    provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
+    price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V1.6.1 | {len(STOCKS)} stocks | Data: {provider}")
+    print(f"Quality Dip Scanner V1.7 | {len(STOCKS)} stocks")
+    print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
-    print("Fundamental cache: refresh every 30 days")
-    print("=" * 145)
+    print("SEC fundamentals cache: refresh every 7 days")
+    print("=" * 155)
 
     for symbol in STOCKS:
         try:
             row = scan_one(symbol)
             rows.append(row)
+
             fundamental_status = row.get("fundamentals_error", "")
+            status = row.get("data_quality") or "D"
+            source = row.get("fundamentals_source") or "NONE"
             if fundamental_status:
                 fundamental_status = f" | {fundamental_status[:45]}"
 
@@ -73,7 +104,8 @@ def main():
                 f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | "
                 f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/20 | "
                 f"D={row['dip_score']:2d}/30 | Div={row['dividend_score']:1d}/5 | "
-                f"Score={row['score']:3d} | {row['signal']}{fundamental_status}"
+                f"Score={row['score']:3d} | {status}/{source} | {row['signal']}"
+                f"{fundamental_status}"
             )
         except Exception as exc:
             errors.append({"ticker": symbol, "error": str(exc)})
@@ -91,15 +123,17 @@ def main():
         "ticker", "price", "high_100d", "drawdown_100d", "drawdown_60d",
         "drawdown_20d", "sma_200", "above_200dma", "rsi_14",
         "eps", "free_cash_flow", "roe", "payout_ratio", "pe",
+        "revenue", "net_income", "total_assets", "equity", "debt",
         "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
-        "fundamental_date", "fundamentals_source", "fundamentals_error",
-        "quality_score", "valuation_score", "dip_score", "dividend_score",
-        "score", "dip_type", "buy_stage", "risk_flags", "signal",
+        "fundamental_date", "fundamentals_source", "data_quality",
+        "fundamentals_error", "quality_score", "valuation_score",
+        "dip_score", "dividend_score", "score", "dip_type",
+        "buy_stage", "risk_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
     print("\nTop candidates")
-    print("-" * 180)
+    print("-" * 200)
     print(df[columns].to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
     df.to_csv("scan_results.csv", index=False)
