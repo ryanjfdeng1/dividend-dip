@@ -10,7 +10,7 @@ def _num(value):
 
 
 def score_stock(row: dict) -> tuple:
-    """V1.6 Quality Dip score.
+    """V1.8 Quality Dip score.
 
     Maximum = 100:
       Quality 45, Valuation 20, Dip 30, Dividend 5.
@@ -25,6 +25,8 @@ def score_stock(row: dict) -> tuple:
     eps_growth = _num(row.get("eps_growth"))
     payout = _num(row.get("payout_ratio"))
     pe = _num(row.get("pe"))
+    data_quality = row.get("data_quality")
+    fundamental_age = _num(row.get("fundamental_age_days"))
     dd100 = _num(row.get("drawdown_100d"))
     dd60 = _num(row.get("drawdown_60d"))
     dd20 = _num(row.get("drawdown_20d"))
@@ -101,7 +103,7 @@ def score_stock(row: dict) -> tuple:
         dividend += 1
     dividend = min(5, dividend)
 
-    total = min(100, quality + valuation + dip + dividend)
+    # Freshness guard: verified fundamentals must be current enough to support a BUY.\n    if fundamental_age is not None and fundamental_age > 450:\n        quality = 0\n        valuation = 0\n    total = min(100, quality + valuation + dip + dividend)
 
     fundamentals_available = bool(row.get("fundamentals_available"))
     risk_flags = []
