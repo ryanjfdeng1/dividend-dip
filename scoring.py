@@ -1,5 +1,7 @@
 import math
 
+from config import FINANCIALS, BANKS
+
 
 def _num(value):
     try:
@@ -13,6 +15,9 @@ def score_stock(row: dict) -> tuple:
     """V1.8 Quality Dip score. Maximum 100: Quality 45, Valuation 20, Dip 30, Dividend 5."""
     eps = _num(row.get("eps"))
     fcf = _num(row.get("free_cash_flow"))
+    symbol = str(row.get("ticker", "")).upper()
+    is_financial = symbol in FINANCIALS
+    is_bank = symbol in BANKS
     roe = _num(row.get("roe"))
     revenue_growth = _num(row.get("revenue_growth"))
     eps_growth = _num(row.get("eps_growth"))
@@ -28,7 +33,7 @@ def score_stock(row: dict) -> tuple:
 
     quality = 0
     if eps is not None and eps > 0: quality += 7
-    if fcf is not None and fcf > 0: quality += 8
+    if not is_financial and fcf is not None and fcf > 0: quality += 8
     if roe is not None:
         if roe >= 0.25: quality += 10
         elif roe >= 0.20: quality += 8
@@ -92,7 +97,7 @@ def score_stock(row: dict) -> tuple:
     risk_flags = []
     if fundamentals_verified:
         if eps is not None and eps <= 0: risk_flags.append("NEGATIVE_EPS")
-        if fcf is not None and fcf <= 0: risk_flags.append("NEGATIVE_FCF")
+        if not is_financial and fcf is not None and fcf <= 0: risk_flags.append("NEGATIVE_FCF")
         if payout is not None and payout > 1.0: risk_flags.append("PAYOUT_GT_100")
         if eps_growth is not None and eps_growth < -0.10: risk_flags.append("EPS_DECLINE")
         if revenue_growth is not None and revenue_growth < -0.10: risk_flags.append("REVENUE_DECLINE")
