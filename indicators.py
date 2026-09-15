@@ -22,7 +22,7 @@ def calculate_rsi(close: pd.Series, period: int = RSI_PERIOD) -> float:
 def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
     dividends = history.get("Dividend")
     if dividends is None:
-        return {"dividend_yield": np.nan, "dividend_growth": np.nan}
+        return {"dividend_yield": np.nan, "dividend_growth": np.nan, "annual_dividend": np.nan}
 
     dividends = pd.to_numeric(dividends, errors="coerce").fillna(0)
     dates = dividends.index
@@ -40,6 +40,7 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
     return {
         "dividend_yield": float(last_year / current) if current > 0 else np.nan,
         "dividend_growth": growth,
+        "annual_dividend": float(last_year),
     }
 
 
@@ -72,6 +73,9 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
     fundamentals = fundamentals or {}
     result.update({
         "fundamentals_available": bool(fundamentals.get("fundamentals_available")),
+        "fundamentals_source": fundamentals.get("fundamentals_source"),
+        "data_quality": fundamentals.get("data_quality"),
+        "fundamentals_error": fundamentals.get("fundamentals_error"),
         "eps": fundamentals.get("eps", np.nan),
         "free_cash_flow": fundamentals.get("free_cash_flow", np.nan),
         "roe": fundamentals.get("roe", np.nan),
@@ -79,6 +83,23 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "pe": fundamentals.get("pe", np.nan),
         "revenue_growth": fundamentals.get("revenue_growth", np.nan),
         "eps_growth": fundamentals.get("eps_growth", np.nan),
+        "revenue": fundamentals.get("revenue", np.nan),
+        "net_income": fundamentals.get("net_income", np.nan),
+        "total_assets": fundamentals.get("total_assets", np.nan),
+        "equity": fundamentals.get("equity", np.nan),
+        "debt": fundamentals.get("debt", np.nan),
         "fundamental_date": fundamentals.get("fundamental_date"),
     })
+
+    # Derive payout ratio from SEC EPS + trailing annual dividends when the
+    # provider does not supply it directly.
+    eps = result["eps"]
+    annual_dividend = result["annual_dividend"]
+    if pd.isna(result["payout_ratio"]) and pd.notna(eps) and eps > 0 and pd.notna(annual_dividend):
+        result["payout_ratio"] = float(annual_dividend / eps)
+
+    # Current P/E is intentionally calculated from price and annual EPS.
+    if pd.isna(result["pe"]) and pd.notna(eps) and eps > 0:
+        result["pe"] = float(current / eps)
+
     return result
