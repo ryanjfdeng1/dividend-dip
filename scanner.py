@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 from dotenv import load_dotenv
 
-from config import STOCKS
+from config import STOCKS, FINANCIALS
 from data_provider import get_daily_history
 from fundamentals import get_fundamentals as get_tiingo_fundamentals
 from sec_fundamentals import get_sec_fundamentals
@@ -82,7 +82,7 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V1.8 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V1.8.1 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
     print("SEC fundamentals cache: refresh every 7 days")
@@ -94,6 +94,7 @@ def main():
             rows.append(row)
 
             fundamental_status = row.get("fundamentals_error", "")
+            sector = "FIN" if symbol in FINANCIALS else "NON-FIN"
             status = row.get("data_quality") or "D"
             source = row.get("fundamentals_source") or "NONE"
             if fundamental_status:
@@ -104,7 +105,7 @@ def main():
                 f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | "
                 f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/20 | "
                 f"D={row['dip_score']:2d}/30 | Div={row['dividend_score']:1d}/5 | "
-                f"Score={row['score']:3d} | {status}/{source} | {row['signal']}"
+                f"Score={row['score']:3d} | {status}/{source} | {sector} | {row['signal']}"
                 f"{fundamental_status}"
             )
         except Exception as exc:
