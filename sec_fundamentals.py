@@ -226,6 +226,11 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         if net_income is not None and equity and float(equity["val"]) > 0:
             roe = net_income / float(equity["val"])
 
+        shares = _latest_annual_value(facts, [
+            "EntityCommonStockSharesOutstanding",
+            "CommonStocksIncludingAdditionalPaidInCapitalMember"
+        ])
+
         debt = None
         if debt_current or debt_long:
             debt = float((debt_current or {}).get("val", 0)) + float(
@@ -249,6 +254,7 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "total_assets": float(assets["val"]) if assets else None,
             "equity": float(equity["val"]) if equity else None,
             "debt": debt,
+            "shares_outstanding": shares,
             "fundamental_date": fundamental_date,
             "fundamental_age_days": (
                 (date.today() - date.fromisoformat(fundamental_date)).days
