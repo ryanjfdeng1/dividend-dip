@@ -1,18 +1,14 @@
-# Quality Dip Scanner V1.6.1
+# Quality Dip Scanner V1.7
 
 A manual research scanner for finding high-quality US companies after meaningful price drawdowns.
 
 ## Strategy
 
-V1.6 is no longer a high-dividend strategy.
-
-The core idea is:
-
 > Quality company + reasonable valuation + meaningful dip = candidate
 
 Dividend yield is only a small optional bonus.
 
-## V1.6 score
+## Score
 
 | Component | Weight |
 |---|---:|
@@ -22,47 +18,83 @@ Dividend yield is only a small optional bonus.
 | Dividend | 5 |
 | **Total** | **100** |
 
-## V1.6.1 data architecture
+## V1.7 fundamental-data architecture
 
-The scanner is designed around Tiingo's Starter API limits.
+V1.7 changes the fundamental-data pipeline:
 
-Tiingo currently publishes 50 requests/hour, 1,000 requests/day and 500 unique symbols/month for the Starter plan. Fundamental data through the API is an add-on, while the DOW 30 are available for evaluation. See Tiingo's current pricing and fundamentals documentation.
+**SEC EDGAR XBRL → Tiingo fallback**
 
-The program now:
+The SEC's `data.sec.gov` APIs provide company submissions and extracted XBRL financial-statement data without API keys. The Company Facts endpoint can return all standardized US-GAAP/IFRS facts for a company in one API call. citeturn0search1
 
-1. Caches daily price history locally and refreshes it at most once per trading day.
-2. Caches fundamental data locally for 30 days by default.
-3. Uses a persistent local hourly request budget of 45 requests, leaving a safety margin below Tiingo's 50/hour limit.
-4. Stops making new Tiingo requests after the hourly safety budget is reached; cached data can still be used.
-5. Records fundamental API errors separately instead of silently treating them as poor fundamentals.
-6. Keeps all market-data caches under data/, which is ignored by Git.
+The scanner uses SEC Company Facts as its primary source for:
 
-This means repeated daily scans should consume far fewer API calls after the initial cache has been populated.
+- Revenue
+- Net income
+- EPS
+- Operating cash flow
+- Capital expenditure
+- Free cash flow
+- ROE
+- Revenue growth
+- EPS growth
+- Debt
+- Equity
+- Assets
 
-## Important limitation
+Current P/E is calculated from the latest annual EPS and current market price. Payout ratio is derived from trailing annual dividends / EPS when possible.
 
-If your Tiingo account does not have fundamental-data access for a ticker, the scanner cannot manufacture the missing data. Such stocks remain DATA INCOMPLETE rather than being treated as low-quality companies.
+If SEC data is temporarily unavailable or insufficient and Tiingo Fundamentals access is configured, Tiingo is used as a fallback.
+
+### Data quality
+
+- **B / SEC_XBRL** — fundamental data successfully obtained from SEC.
+- **B / Tiingo** — SEC was insufficient, but Tiingo supplied usable fundamentals.
+- **D / SEC_ERROR** — fundamental data could not be obtained.
+- `DATA INCOMPLETE` means the program cannot verify the company's fundamentals; it does **not** mean the company has poor fundamentals.
+
+SEC fundamental caches are kept locally for 7 days by default. This prevents repeated scans from downloading the same Company Facts JSON every day.
+
+## SEC User-Agent
+
+Set a descriptive SEC User-Agent in your local `.env` file. For example:
+
+```
+SEC_USER_AGENT=QualityDipScanner/1.7 your-email@example.com
+```
+
+Do not commit `.env`.
+
+SEC's developer documentation requires automated access to comply with its Privacy and Security Policy; the SEC API documentation is the authoritative reference. citeturn0search1turn0search3
 
 ## Setup
 
-Create .env locally:
+Create `.env` locally:
 
+```
 TIINGO_API_KEY=YOUR_TIINGO_TOKEN
 ALPHAVANTAGE_API_KEY=YOUR_ALPHA_VANTAGE_KEY
+SEC_USER_AGENT=QualityDipScanner/1.7 your-email@example.com
+```
 
-Never commit .env.
+The price-data provider remains Tiingo when `TIINGO_API_KEY` is configured, otherwise Alpha Vantage is used.
 
 ## Run
 
+```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 python scanner.py
+```
 
 Outputs:
 
-- scan_results.csv
-- scan_errors.csv
-- local price/fundamental caches under data/
+- `scan_results.csv`
+- `scan_errors.csv`
+- local price and SEC fundamental caches under `data/`
+
+## Why Alpha Vantage remains useful
+
+Alpha Vantage also provides standardized fundamental endpoints for company overview, income statement, balance sheet, cash flow, shares outstanding, and earnings history. It is therefore a good future validation/secondary provider, but V1.7 does not spend an Alpha Vantage request for every stock when SEC data is available. citeturn0search0
 
 ## Dip stages
 
@@ -75,8 +107,8 @@ Outputs:
 
 These are research labels, not automatic trading instructions.
 
-## Next step: V1.7 backtest
+## Next step: V1.8
 
-Once the data pipeline is stable, test forward 1M / 3M / 6M / 12M returns for different score and drawdown thresholds.
+Validate SEC-derived metrics against a second provider for a sample of stocks, then improve the quality score with margins, leverage and ROIC where the data is sufficiently reliable.
 
 No automatic trading is implemented.
