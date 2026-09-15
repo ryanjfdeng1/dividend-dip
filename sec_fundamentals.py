@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import requests
@@ -13,15 +13,15 @@ CACHE_DIR.mkdir(exist_ok=True)
 
 SEC_CACHE_DAYS = int(os.getenv("SEC_CACHE_DAYS", "7"))
 SEC_DELAY = float(os.getenv("SEC_REQUEST_DELAY", "0.15"))
+SEC_MAX_FUNDAMENTAL_AGE_DAYS = int(os.getenv("SEC_MAX_FUNDAMENTAL_AGE_DAYS", "450"))
 
 _TICKER_MAP = None
 
 
 def _headers():
-    # SEC asks automated users to declare a descriptive User-Agent with contact info.
     user_agent = os.getenv("SEC_USER_AGENT")
     if not user_agent:
-        user_agent = "QualityDipScanner/1.7 research contact=your-email@example.com"
+        user_agent = "QualityDipScanner/1.8 research contact=your-email@example.com"
     return {"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"}
 
 
@@ -55,7 +55,6 @@ def _get_ticker_map():
     global _TICKER_MAP
     if _TICKER_MAP is not None:
         return _TICKER_MAP
-
     response = requests.get(SEC_TICKER_URL, headers=_headers(), timeout=30)
     response.raise_for_status()
     raw = response.json()
@@ -70,7 +69,6 @@ def _request_companyfacts(symbol):
     cik = _get_ticker_map().get(symbol.upper())
     if not cik:
         raise RuntimeError(f"SEC CIK not found for {symbol}")
-
     response = requests.get(
         f"{SEC_DATA_URL}/api/xbrl/companyfacts/CIK{cik}.json",
         headers=_headers(),
@@ -87,8 +85,7 @@ def _units(fact):
     units = fact.get("units", {})
     if not units:
         return []
-    # Prefer USD, shares, or pure. The caller can select the relevant unit.
-    for unit in ("USD", "shares", "pure", "USD/shares"):
+    for unit in ("USD", "shares", "pure", "USD/shares", "USD/shares"):
         if unit in units:
             return units[unit]
     return next(iter(units.values()))
@@ -109,36 +106,31 @@ def _annual_series(companyfacts, tags):
     for row in rows:
         if row.get("form") not in ("10-K", "20-F", "40-F"):
             continue
-        if row.get("fp") not in (None, "FY"):
-            continue
         if row.get("val") is None:
             continue
-        start = row.get("start")
-        end = row.get("end")
+        start, end = row.get("start"), row.get("end")
         if not start or not end:
             continue
         try:
-            days = (
-                date.fromisoformat(end) - date.fromisoformat(start)
-            ).days
+            days = (date.fromisoformat(end) - date.fromisoformat(start)).days
         except ValueError:
             continue
         if 300 <= days <= 430:
             candidates.append(row)
-    candidates.sort(key=lambda x: x.get("end", ""))
-    # Deduplicate by fiscal year/end date, keeping the latest filed fact.
+
+    # One observation per fiscal period; prefer the latest filing.
     result = {}
     for row in candidates:
-        result[row["end"]] = row
-    return list(sorted(result.values(), key=lambda x: x["end"]))
+        key = row["end"]
+        old = result.get(key)
+        if old is None or row.get("filed", "") > old.get("filed", ""):
+            result[key] = row
+    return sorted(result.values(), key=lambda x: x["end"])
 
 
 def _latest_instant(companyfacts, tags):
     rows = _facts(companyfacts, tags)
-    candidates = []
-    for row in rows:
-        if row.get("val") is not None and row.get("end"):
-            candidates.append(row)
+    candidates = [r for r in rows if r.get("val") is not None and r.get("end")]
     if not candidates:
         return None
     candidates.sort(key=lambda x: (x.get("end", ""), x.get("filed", "")))
@@ -154,23 +146,31 @@ def _growth(companyfacts, tags):
     rows = _annual_series(companyfacts, tags)
     if len(rows) < 2:
         return None
-    latest = float(rows[-1]["val"])
-    prior = float(rows[-2]["val"])
-    if prior == 0:
-        return None
-    return latest / prior - 1
+    latest, prior = float(rows[-1]["val"]), float(rows[-2]["val"])
+    return None if prior == 0 else latest / prior - 1
 
 
 def _ttm_eps(companyfacts):
-    # Prefer Diluted EPS annual facts. Companyfacts commonly reports this in USD/share.
     rows = _annual_series(companyfacts, [
-        "EarningsPerShareDiluted",
-        "EarningsPerShareBasic",
+        "EarningsPerShareDiluted", "EarningsPerShareBasic"
     ])
-    if rows:
-        return float(rows[-1]["val"])
+    return float(rows[-1]["val"]) if rows else None
 
-    return None
+
+def _quality_from_date(fundamental_date):
+    if not fundamental_date:
+        return "D", "MISSING_FUNDAMENTAL_DATE"
+    try:
+        age = (date.today() - date.fromisoformat(fundamental_date)).days
+    except ValueError:
+        return "D", "INVALID_FUNDAMENTAL_DATE"
+    if age <= 365:
+        return "A", ""
+    if age <= SEC_MAX_FUNDAMENTAL_AGE_DAYS:
+        return "B", ""
+    if age <= 730:
+        return "C", "STALE_FUNDAMENTALS"
+    return "D", "VERY_STALE_FUNDAMENTALS"
 
 
 def get_sec_fundamentals(symbol, force_refresh=False):
@@ -181,54 +181,59 @@ def get_sec_fundamentals(symbol, force_refresh=False):
     try:
         facts = _request_companyfacts(symbol)
 
-        revenue = _latest_annual_value(
-            facts, ["RevenueFromContractWithCustomerExcludingAssessedTax",
-                    "Revenues", "SalesRevenueNet"]
-        )
-        net_income = _latest_annual_value(
-            facts, ["NetIncomeLoss", "ProfitLoss"]
-        )
-        equity = _latest_instant(
-            facts, ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]
-        )
-        assets = _latest_instant(facts, ["Assets"])
-        cfo = _latest_annual_value(
-            facts, ["NetCashProvidedByUsedInOperatingActivities"]
-        )
-        capex = _latest_annual_value(
-            facts, ["PaymentsToAcquirePropertyPlantAndEquipment",
-                    "PaymentsToAcquireProductiveAssets"]
-        )
-        debt_current = _latest_instant(
-            facts, ["LongTermDebtCurrent", "LongTermDebtAndFinanceLeaseObligationsCurrent"]
-        )
-        debt_long = _latest_instant(
-            facts, ["LongTermDebtNoncurrent", "LongTermDebtAndFinanceLeaseObligationsNoncurrent"]
-        )
+        revenue_tags = [
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "Revenues", "SalesRevenueNet"
+        ]
+        eps_tags = ["EarningsPerShareDiluted", "EarningsPerShareBasic"]
 
-        eps = _ttm_eps(facts)
+        revenue_rows = _annual_series(facts, revenue_tags)
+        eps_rows = _annual_series(facts, eps_tags)
+
+        revenue = float(revenue_rows[-1]["val"]) if revenue_rows else None
+        net_income = _latest_annual_value(facts, ["NetIncomeLoss", "ProfitLoss"])
+        equity = _latest_instant(facts, [
+            "StockholdersEquity",
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+        ])
+        assets = _latest_instant(facts, ["Assets"])
+        cfo = _latest_annual_value(facts, ["NetCashProvidedByUsedInOperatingActivities"])
+        capex = _latest_annual_value(facts, [
+            "PaymentsToAcquirePropertyPlantAndEquipment",
+            "PaymentsToAcquireProductiveAssets"
+        ])
+        debt_current = _latest_instant(facts, [
+            "LongTermDebtCurrent",
+            "LongTermDebtAndFinanceLeaseObligationsCurrent"
+        ])
+        debt_long = _latest_instant(facts, [
+            "LongTermDebtNoncurrent",
+            "LongTermDebtAndFinanceLeaseObligationsNoncurrent"
+        ])
+
+        eps = float(eps_rows[-1]["val"]) if eps_rows else None
         if eps is None and net_income is not None:
-            shares = _latest_annual_value(
-                facts, ["WeightedAverageNumberOfDilutedSharesOutstanding",
-                        "WeightedAverageNumberOfSharesOutstandingBasic"]
-            )
+            shares = _latest_annual_value(facts, [
+                "WeightedAverageNumberOfDilutedSharesOutstanding",
+                "WeightedAverageNumberOfSharesOutstandingBasic"
+            ])
             if shares and shares > 0:
                 eps = net_income / shares
 
-        fcf = None
-        if cfo is not None:
-            # SEC reports capex as a positive cash outflow for this tag.
-            fcf = cfo - abs(capex or 0)
+        fcf = cfo - abs(capex or 0) if cfo is not None else None
 
         roe = None
-        if net_income is not None and equity and equity.get("val"):
-            equity_value = float(equity["val"])
-            if equity_value > 0:
-                roe = net_income / equity_value
+        if net_income is not None and equity and float(equity["val"]) > 0:
+            roe = net_income / float(equity["val"])
 
         debt = None
         if debt_current or debt_long:
-            debt = float((debt_current or {}).get("val", 0)) + float((debt_long or {}).get("val", 0))
+            debt = float((debt_current or {}).get("val", 0)) + float(
+                (debt_long or {}).get("val", 0)
+            )
+
+        fundamental_date = revenue_rows[-1].get("end") if revenue_rows else None
+        data_quality, freshness_flag = _quality_from_date(fundamental_date)
 
         result = {
             "fundamentals_available": bool(revenue is not None or net_income is not None or eps is not None),
@@ -237,25 +242,26 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "roe": roe,
             "payout_ratio": None,
             "pe": None,
-            "revenue_growth": _growth(
-                facts, ["RevenueFromContractWithCustomerExcludingAssessedTax",
-                        "Revenues", "SalesRevenueNet"]
-            ),
-            "eps_growth": _growth(
-                facts, ["EarningsPerShareDiluted", "EarningsPerShareBasic"]
-            ),
+            "revenue_growth": _growth(facts, revenue_tags),
+            "eps_growth": _growth(facts, eps_tags),
             "revenue": revenue,
             "net_income": net_income,
             "total_assets": float(assets["val"]) if assets else None,
             "equity": float(equity["val"]) if equity else None,
             "debt": debt,
-            "fundamental_date": (revenue and _annual_series(
-                facts, ["RevenueFromContractWithCustomerExcludingAssessedTax",
-                        "Revenues", "SalesRevenueNet"]
-            )[-1].get("end")) or None,
+            "fundamental_date": fundamental_date,
+            "fundamental_age_days": (
+                (date.today() - date.fromisoformat(fundamental_date)).days
+                if fundamental_date else None
+            ),
             "fundamentals_source": "SEC_XBRL",
-            "data_quality": "B",
+            "data_quality": data_quality,
+            "fundamentals_error": freshness_flag or None,
         }
+
+        # A stale SEC record must not be treated as verified quality.
+        if data_quality == "D":
+            result["fundamentals_available"] = False
 
         _save_cache(symbol, result)
         return result
