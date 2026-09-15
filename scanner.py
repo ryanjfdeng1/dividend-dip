@@ -82,7 +82,7 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V1.7 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V1.8 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
     print("SEC fundamentals cache: refresh every 7 days")
@@ -125,7 +125,7 @@ def main():
         "eps", "free_cash_flow", "roe", "payout_ratio", "pe",
         "revenue", "net_income", "total_assets", "equity", "debt",
         "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
-        "fundamental_date", "fundamentals_source", "data_quality",
+        "fundamental_date", "fundamental_age_days", "fundamentals_source", "data_quality",
         "fundamentals_error", "quality_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "risk_flags", "signal",
