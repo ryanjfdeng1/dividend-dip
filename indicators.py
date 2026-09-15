@@ -88,8 +88,20 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "total_assets": fundamentals.get("total_assets", np.nan),
         "equity": fundamentals.get("equity", np.nan),
         "debt": fundamentals.get("debt", np.nan),
+        "shares_outstanding": fundamentals.get("shares_outstanding", np.nan),
         "fundamental_date": fundamentals.get("fundamental_date"),
     })
+
+    # V1.9 valuation metrics. FCF yield is only used for non-financials;
+    # bank/financial cash-flow structures are not comparable to industrial FCF.
+    shares = result["shares_outstanding"]
+    fcf = result["free_cash_flow"]
+    if pd.notna(shares) and shares > 0 and pd.notna(fcf) and fcf > 0:
+        market_cap = current * shares
+        if market_cap > 0:
+            result["fcf_yield"] = float(fcf / market_cap)
+    else:
+        result["fcf_yield"] = np.nan
 
     # Derive payout ratio from SEC EPS + trailing annual dividends when the
     # provider does not supply it directly.
