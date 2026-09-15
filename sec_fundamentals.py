@@ -38,6 +38,10 @@ def _read_cache(symbol):
         cached_on = payload.get("_cached_on")
         if cached_on:
             age = (date.today() - date.fromisoformat(cached_on)).days
+            # V1.9 caches must contain shares_outstanding for FCF yield.
+            # Older V1.8 caches are refreshed once to backfill this field.
+            if "shares_outstanding" not in payload:
+                return None
             if age <= SEC_CACHE_DAYS:
                 payload["fundamentals_source"] = "SEC_CACHE"
                 return payload
