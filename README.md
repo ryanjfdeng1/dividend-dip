@@ -24,7 +24,7 @@ V1.7 changes the fundamental-data pipeline:
 
 **SEC EDGAR XBRL → Tiingo fallback**
 
-The SEC's `data.sec.gov` APIs provide company submissions and extracted XBRL financial-statement data without API keys. The Company Facts endpoint can return all standardized US-GAAP/IFRS facts for a company in one API call. citeturn0search1
+The SEC's `data.sec.gov` APIs provide company submissions and extracted XBRL financial-statement data without API keys. The Company Facts endpoint can return standardized XBRL facts for a company in one API call.
 
 The scanner uses SEC Company Facts as its primary source for:
 
@@ -64,8 +64,6 @@ SEC_USER_AGENT=QualityDipScanner/1.7 your-email@example.com
 
 Do not commit `.env`.
 
-SEC's developer documentation requires automated access to comply with its Privacy and Security Policy; the SEC API documentation is the authoritative reference. citeturn0search1turn0search3
-
 ## Setup
 
 Create `.env` locally:
@@ -94,7 +92,7 @@ Outputs:
 
 ## Why Alpha Vantage remains useful
 
-Alpha Vantage also provides standardized fundamental endpoints for company overview, income statement, balance sheet, cash flow, shares outstanding, and earnings history. It is therefore a good future validation/secondary provider, but V1.7 does not spend an Alpha Vantage request for every stock when SEC data is available. citeturn0search0
+Alpha Vantage also provides standardized fundamental endpoints for company overview, income statement, balance sheet, cash flow, shares outstanding, and earnings history. It is therefore a good future validation/secondary provider, but V1.7 does not spend an Alpha Vantage request for every stock when SEC data is available.
 
 ## Dip stages
 
