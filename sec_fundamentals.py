@@ -21,7 +21,7 @@ _TICKER_MAP = None
 def _headers():
     user_agent = os.getenv("SEC_USER_AGENT")
     if not user_agent:
-        user_agent = "QualityDipScanner/1.8 research contact=your-email@example.com"
+        user_agent = "QualityDipScanner/1.9 research contact=your-email@example.com"
     return {"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"}
 
 
@@ -96,9 +96,13 @@ def _units(fact):
 
 
 def _facts(companyfacts, tags):
-    gaap = companyfacts.get("facts", {}).get("us-gaap", {})
+    facts = companyfacts.get("facts", {})
     for tag in tags:
-        fact = gaap.get(tag)
+        if ":" in tag:
+            taxonomy, concept = tag.split(":", 1)
+        else:
+            taxonomy, concept = "us-gaap", tag
+        fact = facts.get(taxonomy, {}).get(concept)
         if fact:
             return _units(fact)
     return []
@@ -230,10 +234,16 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         if net_income is not None and equity and float(equity["val"]) > 0:
             roe = net_income / float(equity["val"])
 
-        shares = _latest_annual_value(facts, [
-            "EntityCommonStockSharesOutstanding",
-            "CommonStocksIncludingAdditionalPaidInCapitalMember"
+        # Shares outstanding is an instant fact, not an annual duration.
+        # SEC defines dei:EntityCommonStockSharesOutstanding as an instant
+        # disclosure and it can be dimensioned by share class.
+        shares_row = _latest_instant(facts, [
+            "dei:EntityCommonStockSharesOutstanding",
+            "us-gaap:CommonStockSharesOutstanding",
         ])
+        shares = float(shares_row["val"]) if shares_row else None
+        if shares is not None and shares <= 0:
+            shares = None
 
         debt = None
         if debt_current or debt_long:
