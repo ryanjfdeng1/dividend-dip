@@ -82,7 +82,7 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V1.8.1 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V1.9 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
     print("SEC fundamentals cache: refresh every 7 days")
@@ -102,9 +102,9 @@ def main():
 
             print(
                 f"OK   {symbol:5s} | DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | "
-                f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | "
-                f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/20 | "
-                f"D={row['dip_score']:2d}/30 | Div={row['dividend_score']:1d}/5 | "
+                f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s}% | "
+                f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/30 | "
+                f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
                 f"Score={row['score']:3d} | {status}/{source} | {sector} | {row['signal']}"
                 f"{fundamental_status}"
             )
@@ -123,7 +123,7 @@ def main():
     columns = [
         "ticker", "price", "high_100d", "drawdown_100d", "drawdown_60d",
         "drawdown_20d", "sma_200", "above_200dma", "rsi_14",
-        "eps", "free_cash_flow", "roe", "payout_ratio", "pe",
+        "eps", "free_cash_flow", "fcf_yield", "shares_outstanding", "roe", "payout_ratio", "pe",
         "revenue", "net_income", "total_assets", "equity", "debt",
         "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
         "fundamental_date", "fundamental_age_days", "fundamentals_source", "data_quality",
