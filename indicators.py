@@ -91,6 +91,8 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "shares_outstanding": fundamentals.get("shares_outstanding", np.nan),
         "fundamental_date": fundamentals.get("fundamental_date"),
         "fundamental_age_days": fundamentals.get("fundamental_age_days", np.nan),
+        "latest_quarter_date": fundamentals.get("latest_quarter_date"),
+        "latest_filing_date": fundamentals.get("latest_filing_date"),
     })
 
     # V1.9 valuation metrics. FCF yield is only used for non-financials;
