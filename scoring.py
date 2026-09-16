@@ -133,8 +133,13 @@ def score_stock(row: dict) -> tuple:
         if payout is not None and payout > 1.0: risk_flags.append("PAYOUT_GT_100")
         if eps_growth is not None and eps_growth < -0.10: risk_flags.append("EPS_DECLINE")
         if revenue_growth is not None and revenue_growth < -0.10: risk_flags.append("REVENUE_DECLINE")
-    if fundamental_age is not None and fundamental_age > 450:
-        risk_flags.append("STALE_FUNDAMENTALS")
+    if fundamental_age is not None:
+        if fundamental_age > 365:
+            risk_flags.append("VERY_STALE_FUNDAMENTALS")
+        elif fundamental_age > 270:
+            risk_flags.append("STALE_FUNDAMENTALS")
+        elif fundamental_age > 210:
+            risk_flags.append("AGING_FUNDAMENTALS")
 
     if not fundamentals_verified:
         dip_type = "UNKNOWN"
