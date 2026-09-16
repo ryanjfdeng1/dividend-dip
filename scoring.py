@@ -102,11 +102,27 @@ def score_stock(row: dict) -> tuple:
         elif div_growth >= 0: dividend += 1
     dividend = min(5, dividend)
 
-    fundamentals_verified = bool(row.get("fundamentals_available")) and data_quality in ("A", "B")
-    if fundamental_age is not None and fundamental_age > 450:
+    # V1.9 freshness: recent quarterly data keeps full scoring power;
+    # aging data is progressively discounted so stale fundamentals cannot
+    # produce a high-quality candidate merely because the old numbers were good.
+    freshness_factor = 1.0
+    if fundamental_age is None:
+        freshness_factor = 0.0
+    elif fundamental_age > 365:
+        freshness_factor = 0.0
+    elif fundamental_age > 270:
+        freshness_factor = 0.50
+    elif fundamental_age > 210:
+        freshness_factor = 0.75
+    elif fundamental_age > 120:
+        freshness_factor = 0.90
+
+    quality = round(quality * freshness_factor)
+    valuation = round(valuation * freshness_factor)
+
+    fundamentals_verified = bool(row.get("fundamentals_available")) and data_quality in ("A", "B", "C", "D") and freshness_factor > 0
+    if data_quality in ("D", "E") or freshness_factor == 0:
         fundamentals_verified = False
-        quality = 0
-        valuation = 0
 
     total = min(100, quality + valuation + dip + dividend)
 
