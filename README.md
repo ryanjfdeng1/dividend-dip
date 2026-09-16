@@ -1,4 +1,4 @@
-# Quality Dip Scanner V1.7
+# Quality Dip Scanner V1.9
 
 A manual research scanner for finding high-quality US companies after meaningful price drawdowns.
 
@@ -18,7 +18,7 @@ Dividend yield is only a small optional bonus.
 | Dividend | 5 |
 | **Total** | **100** |
 
-## V1.7 fundamental-data architecture
+## V1.9 fundamental-data architecture
 
 V1.7 changes the fundamental-data pipeline:
 
@@ -26,7 +26,7 @@ V1.7 changes the fundamental-data pipeline:
 
 The SEC's `data.sec.gov` APIs provide company submissions and extracted XBRL financial-statement data without API keys. The Company Facts endpoint can return standardized XBRL facts for a company in one API call.
 
-The scanner uses SEC Company Facts as its primary source for:
+The scanner uses SEC Company Facts as its primary source. V1.9 prefers the latest four standalone quarterly observations to build TTM revenue, net income, EPS and cash flow metrics when sufficient XBRL data is available. It falls back to annual data when quarterly observations are insufficient. The scanner also records the latest quarter and filing dates.
 
 - Revenue
 - Net income
@@ -105,8 +105,18 @@ Alpha Vantage also provides standardized fundamental endpoints for company overv
 
 These are research labels, not automatic trading instructions.
 
-## Next step: V1.8
+## V1.9 freshness rules
 
-Validate SEC-derived metrics against a second provider for a sample of stocks, then improve the quality score with margins, leverage and ROIC where the data is sufficiently reliable.
+Fundamental freshness now affects scoring:
+- <=120 days: full quality/valuation weight
+- 121-210 days: 90%
+- 211-270 days: 75%
+- 271-365 days: 50%
+- >365 days: fundamentals are not verified and the stock cannot receive a BUY CANDIDATE signal
+
+The scanner also emits `fundamental_age_days`, `latest_quarter_date`, and `latest_filing_date` so stale inputs are visible in the CSV.
+
+## Next step: V2.0
+Validate SEC-derived metrics against a second provider for a sample of stocks, then add margins, leverage and ROIC where the data is sufficiently reliable.
 
 No automatic trading is implemented.
