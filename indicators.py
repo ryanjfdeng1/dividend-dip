@@ -93,6 +93,18 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "fundamental_age_days": fundamentals.get("fundamental_age_days", np.nan),
         "latest_quarter_date": fundamentals.get("latest_quarter_date"),
         "latest_filing_date": fundamentals.get("latest_filing_date"),
+        "revenue_cagr_3y": fundamentals.get("revenue_cagr_3y", np.nan),
+        "revenue_cagr_5y": fundamentals.get("revenue_cagr_5y", np.nan),
+        "eps_cagr_3y": fundamentals.get("eps_cagr_3y", np.nan),
+        "eps_cagr_5y": fundamentals.get("eps_cagr_5y", np.nan),
+        "fcf_cagr_3y": fundamentals.get("fcf_cagr_3y", np.nan),
+        "fcf_cagr_5y": fundamentals.get("fcf_cagr_5y", np.nan),
+        "operating_margin": fundamentals.get("operating_margin", np.nan),
+        "margin_change_3y": fundamentals.get("margin_change_3y", np.nan),
+        "margin_change_5y": fundamentals.get("margin_change_5y", np.nan),
+        "debt_change_3y": fundamentals.get("debt_change_3y", np.nan),
+        "debt_change_5y": fundamentals.get("debt_change_5y", np.nan),
+        "roic_proxy": fundamentals.get("roic_proxy", np.nan),
     })
 
     # V1.9 valuation metrics. FCF yield is only used for non-financials;
