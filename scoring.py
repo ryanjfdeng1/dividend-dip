@@ -40,28 +40,39 @@ def score_stock(row: dict) -> tuple:
     div_growth = _num(row.get("dividend_growth"))
     debt = _num(row.get("debt"))
     equity = _num(row.get("equity"))
+    revenue_cagr_3y = _num(row.get("revenue_cagr_3y"))
+    revenue_cagr_5y = _num(row.get("revenue_cagr_5y"))
+    eps_cagr_3y = _num(row.get("eps_cagr_3y"))
+    eps_cagr_5y = _num(row.get("eps_cagr_5y"))
+    fcf_cagr_3y = _num(row.get("fcf_cagr_3y"))
+    fcf_cagr_5y = _num(row.get("fcf_cagr_5y"))
+    margin_change_3y = _num(row.get("margin_change_3y"))
+    margin_change_5y = _num(row.get("margin_change_5y"))
+    debt_change_3y = _num(row.get("debt_change_3y"))
+    debt_change_5y = _num(row.get("debt_change_5y"))
+    roic_proxy = _num(row.get("roic_proxy"))
 
     quality = 0
     if eps is not None and eps > 0:
-        quality += 7
+        quality += 5
     if not is_financial and fcf is not None and fcf > 0:
-        quality += 8
+        quality += 6
     if roe is not None:
         if roe >= 0.25:
-            quality += 10
+            quality += 5
         elif roe >= 0.20:
-            quality += 8
+            quality += 5
         elif roe >= 0.15:
-            quality += 6
+            quality += 4
         elif roe >= 0.10:
-            quality += 3
+            quality += 2
     if revenue_growth is not None:
         if revenue_growth >= 0.10:
             quality += 7
         elif revenue_growth >= 0.05:
             quality += 6
         elif revenue_growth >= 0:
-            quality += 3
+            quality += 2
     if eps_growth is not None:
         if eps_growth >= 0.10:
             quality += 7
@@ -71,7 +82,46 @@ def score_stock(row: dict) -> tuple:
             quality += 3
     if payout is not None and 0 <= payout <= 0.70:
         quality += 3
-    quality = min(45, quality)
+    quality = min(30, quality)
+
+
+
+    # V2.1 long-term business trend: 15 points.
+    # This is deliberately separate from the one-year quality metrics.
+    trend_score = 0
+    trend_components = []
+
+    def _cagr_points(value, strong, good, neutral):
+        if value is None:
+            return 0
+        if value >= strong:
+            return 3
+        if value >= good:
+            return 2
+        if value >= neutral:
+            return 1
+        return 0
+
+    trend_score += _cagr_points(revenue_cagr_5y, 0.08, 0.03, 0.0)
+    trend_score += _cagr_points(eps_cagr_5y, 0.10, 0.05, 0.0)
+    trend_score += _cagr_points(fcf_cagr_5y, 0.10, 0.05, 0.0)
+    if roic_proxy is not None:
+        if roic_proxy >= 0.15:
+            trend_score += 3
+        elif roic_proxy >= 0.10:
+            trend_score += 2
+        elif roic_proxy >= 0.06:
+            trend_score += 1
+    if margin_change_5y is not None:
+        if margin_change_5y >= 0.10:
+            trend_score += 3
+        elif margin_change_5y >= 0:
+            trend_score += 2
+        elif margin_change_5y > -0.10:
+            trend_score += 1
+
+    # Cap at 15. Missing long-term data earns no points rather than a penalty.
+    trend_score = min(15, trend_score)
 
     valuation = 0
     if pe is not None and pe > 0:
@@ -239,6 +289,34 @@ def score_stock(row: dict) -> tuple:
                 structural_penalty += 4
                 structural_flags.append("LEVERAGE")
 
+        # Long-term deterioration signals. These complement, rather than
+        # replace, the existing one-year checks.
+        if revenue_cagr_5y is not None and revenue_cagr_5y < -0.02:
+            structural_penalty += 4
+            structural_flags.append("REVENUE_5Y_DECLINE")
+        elif revenue_cagr_3y is not None and revenue_cagr_3y < -0.05:
+            structural_penalty += 3
+            structural_flags.append("REVENUE_3Y_DECLINE")
+
+        if eps_cagr_5y is not None and eps_cagr_5y < -0.05:
+            structural_penalty += 4
+            structural_flags.append("EPS_5Y_DECLINE")
+        elif eps_cagr_3y is not None and eps_cagr_3y < -0.10:
+            structural_penalty += 3
+            structural_flags.append("EPS_3Y_DECLINE")
+
+        if fcf_cagr_5y is not None and fcf_cagr_5y < -0.05:
+            structural_penalty += 3
+            structural_flags.append("FCF_5Y_DECLINE")
+
+        if margin_change_5y is not None and margin_change_5y < -0.15:
+            structural_penalty += 3
+            structural_flags.append("MARGIN_COMPRESSION")
+
+        if debt_change_5y is not None and debt_change_5y > 0.50:
+            structural_penalty += 2
+            structural_flags.append("DEBT_GROWTH")
+
     structural_penalty = min(20, structural_penalty)
 
     if not fundamentals_verified:
@@ -250,7 +328,7 @@ def score_stock(row: dict) -> tuple:
     else:
         value_trap_risk = "LOW"
 
-    total = max(0, min(100, quality + valuation + dip + dividend - structural_penalty))
+    total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
     if not fundamentals_verified:
         dip_type = "UNKNOWN"
@@ -297,6 +375,6 @@ def score_stock(row: dict) -> tuple:
 
     return (
         total, signal, dip, dividend, quality, valuation,
-        structural_penalty, value_trap_risk, dip_type, buy_stage,
+        trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         ",".join(risk_flags), ",".join(structural_flags)
     )
