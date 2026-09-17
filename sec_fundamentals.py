@@ -12,7 +12,7 @@ CACHE_DIR = Path("data")
 CACHE_DIR.mkdir(exist_ok=True)
 
 SEC_CACHE_DAYS = int(os.getenv("SEC_CACHE_DAYS", "7"))
-FUNDAMENTALS_VERSION = "2.1"
+FUNDAMENTALS_VERSION = "2.1.1"
 SEC_DELAY = float(os.getenv("SEC_REQUEST_DELAY", "0.15"))
 
 # Freshness is based on the period covered by the financial data, not merely
@@ -45,7 +45,7 @@ def _read_cache(symbol):
         cached_on = payload.get("_cached_on")
         if cached_on:
             age = (date.today() - date.fromisoformat(cached_on)).days
-            # V1.9 caches are refreshed once so the new TTM/quarterly logic is used.
+            # V2.1.1 caches are refreshed once so the latest trend logic is used.
             if (
                 age <= SEC_CACHE_DAYS
                 and payload.get("fundamentals_version") == FUNDAMENTALS_VERSION
