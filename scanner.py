@@ -108,7 +108,7 @@ def main():
             print(
                 f"OK   {symbol:5s} | DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | "
                 f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s}% | "
-                f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/30 | "
+                f"Q={row['quality_score']:2d}/30 | T={row['trend_score']:2d}/15 | V={row['valuation_score']:2d}/30 | "
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
                 f"Score={row['score']:3d} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
                 f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source} | "
