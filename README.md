@@ -1,4 +1,4 @@
-# Quality Dip Scanner V1.9
+# Quality Dip Scanner V2.0
 
 A manual research scanner for finding high-quality US companies after meaningful price drawdowns.
 
@@ -18,9 +18,9 @@ Dividend yield is only a small optional bonus.
 | Dividend | 5 |
 | **Total** | **100** |
 
-## V1.9 fundamental-data architecture
+## V2.0 fundamental-data architecture
 
-V1.7 changes the fundamental-data pipeline:
+The V1.7+ pipeline uses:
 
 **SEC EDGAR XBRL → Tiingo fallback**
 
@@ -105,9 +105,9 @@ Alpha Vantage also provides standardized fundamental endpoints for company overv
 
 These are research labels, not automatic trading instructions.
 
-## V1.9 freshness rules
+## V2.0 structural-risk / value-trap detection
 
-Fundamental freshness now affects scoring:
+V2.0 keeps the original 100-point base score (Quality 45 + Valuation 30 + Dip 20 + Dividend 5), then applies a separate structural-risk penalty of up to 20 points. The report exposes the penalty instead of hiding it.
 - <=120 days: full quality/valuation weight
 - 121-210 days: 90%
 - 211-270 days: 75%
@@ -116,7 +116,18 @@ Fundamental freshness now affects scoring:
 
 The scanner also emits `fundamental_age_days`, `latest_quarter_date`, and `latest_filing_date` so stale inputs are visible in the CSV.
 
-## Next step: V2.0
-Validate SEC-derived metrics against a second provider for a sample of stocks, then add margins, leverage and ROIC where the data is sufficiently reliable.
+### Structural risk signals
+- Revenue TTM decline >5%: structural warning; >10%: stronger warning.
+- EPS TTM decline >5%: structural warning; >10%: stronger warning.
+- Negative FCF or EPS can add structural risk for non-financial companies.
+- High leverage can add structural risk for non-financial companies.
+- Structural penalty is capped at 20 points.
+- `LOW`, `MEDIUM`, `HIGH`, or `UNKNOWN` is reported as `value_trap_risk`.
+- `VALUE TRAP REVIEW` replaces a buy signal when structural risk is high.
+
+These are research flags, not claims that a company is actually a value trap. The scanner is designed to trigger manual review.
+
+## Next step: V2.1
+Validate structural-risk signals against margins, leverage, ROIC and multi-year business trends where the SEC data is sufficiently reliable.
 
 No automatic trading is implemented.
