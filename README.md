@@ -1,4 +1,4 @@
-# Quality Dip Scanner V2.0
+# Quality Dip Scanner V2.1
 
 A manual research scanner for finding high-quality US companies after meaningful price drawdowns.
 
@@ -131,3 +131,32 @@ These are research flags, not claims that a company is actually a value trap. Th
 Validate structural-risk signals against margins, leverage, ROIC and multi-year business trends where the SEC data is sufficiently reliable.
 
 No automatic trading is implemented.
+
+
+## V2.1 long-term business trend
+
+V2.1 keeps the 100-point base score but reallocates it to:
+- Quality: 30
+- Long-term business trend: 15
+- Valuation: 30
+- Dip: 20
+- Dividend: 5
+
+The long-term trend score uses SEC XBRL history where available:
+- 3/5-year revenue CAGR
+- 3/5-year EPS CAGR
+- 3/5-year FCF CAGR
+- operating-margin trend
+- debt trend
+- ROIC proxy
+
+The ROIC field is explicitly a proxy because there is no single universal ROIC XBRL field across issuers. It uses operating income, estimated tax rate and debt + equity as invested capital.
+
+Long-term deterioration can also add to the separate structural-risk penalty:
+- 5-year revenue decline
+- 5-year EPS decline
+- 5-year FCF decline
+- material margin compression
+- rapid debt growth
+
+The scanner should treat these as research flags rather than automatic conclusions about a business. SEC Company Facts provides historical XBRL facts through the public data API.
