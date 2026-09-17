@@ -12,6 +12,7 @@ CACHE_DIR = Path("data")
 CACHE_DIR.mkdir(exist_ok=True)
 
 SEC_CACHE_DAYS = int(os.getenv("SEC_CACHE_DAYS", "7"))
+FUNDAMENTALS_VERSION = "2.1"
 SEC_DELAY = float(os.getenv("SEC_REQUEST_DELAY", "0.15"))
 
 # Freshness is based on the period covered by the financial data, not merely
@@ -47,7 +48,7 @@ def _read_cache(symbol):
             # V1.9 caches are refreshed once so the new TTM/quarterly logic is used.
             if (
                 age <= SEC_CACHE_DAYS
-                and payload.get("fundamentals_version") == "1.9"
+                and payload.get("fundamentals_version") == FUNDAMENTALS_VERSION
                 and "shares_outstanding" in payload
                 and "latest_quarter_date" in payload
             ):
@@ -60,7 +61,7 @@ def _read_cache(symbol):
 
 def _save_cache(symbol, payload):
     payload["_cached_on"] = date.today().isoformat()
-    payload["fundamentals_version"] = "1.9"
+    payload["fundamentals_version"] = FUNDAMENTALS_VERSION
     _cache_path(symbol).write_text(json.dumps(payload))
 
 
@@ -231,6 +232,26 @@ def _freshness(fundamental_date):
     return "E", "VERY_STALE_FUNDAMENTALS", age
 
 
+
+def _cagr_from_annual(rows, years):
+    if len(rows) < years + 1:
+        return None
+    latest = float(rows[-1]["val"])
+    base = float(rows[-(years + 1)]["val"])
+    if base <= 0 or latest <= 0:
+        return None
+    return (latest / base) ** (1 / years) - 1
+
+
+def _trend_change(rows, years):
+    if len(rows) < years + 1:
+        return None
+    latest = float(rows[-1]["val"])
+    base = float(rows[-(years + 1)]["val"])
+    if base == 0:
+        return None
+    return latest / base - 1
+
 def get_sec_fundamentals(symbol, force_refresh=False):
     cached = None if force_refresh else _read_cache(symbol)
     if cached is not None:
@@ -244,6 +265,13 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "Revenues", "SalesRevenueNet"
         ]
         eps_tags = ["EarningsPerShareDiluted", "EarningsPerShareBasic"]
+
+        operating_income_tags = ["OperatingIncomeLoss"]
+        tax_expense_tags = ["IncomeTaxExpenseBenefit"]
+        pretax_income_tags = [
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeTaxExpenseBenefit"
+        ]
         net_income_tags = ["NetIncomeLoss", "ProfitLoss"]
         cfo_tags = ["NetCashProvidedByUsedInOperatingActivities"]
         capex_tags = [
@@ -309,6 +337,67 @@ def get_sec_fundamentals(symbol, force_refresh=False):
 
         fcf = cfo - abs(capex or 0) if cfo is not None else None
 
+        revenue_annual = _annual_series(facts, revenue_tags)
+        fcf_annual = []
+        cfo_annual = _annual_series(facts, cfo_tags)
+        capex_annual = _annual_series(facts, capex_tags)
+        capex_by_end = {r["end"]: float(r["val"]) for r in capex_annual}
+        for r in cfo_annual:
+            if r["end"] in capex_by_end:
+                fcf_annual.append({"end": r["end"], "val": float(r["val"]) - abs(capex_by_end[r["end"]])})
+
+        operating_income_annual = _annual_series(facts, operating_income_tags)
+        debt_annual = _annual_series(facts, ["LongTermDebtNoncurrent", "LongTermDebtAndFinanceLeaseObligationsNoncurrent"])
+        equity_annual = _annual_series(facts, [
+            "StockholdersEquity",
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+        ])
+        eps_annual = _annual_series(facts, eps_tags)
+        revenue_cagr_3y = _cagr_from_annual(revenue_annual, 3)
+        revenue_cagr_5y = _cagr_from_annual(revenue_annual, 5)
+        eps_cagr_3y = _cagr_from_annual(eps_annual, 3)
+        eps_cagr_5y = _cagr_from_annual(eps_annual, 5)
+        fcf_cagr_3y = _cagr_from_annual(fcf_annual, 3)
+        fcf_cagr_5y = _cagr_from_annual(fcf_annual, 5)
+
+        rev_by_end = {r["end"]: float(r["val"]) for r in revenue_annual}
+        margin_history = []
+        for r in operating_income_annual:
+            rev = rev_by_end.get(r["end"])
+            if rev and rev > 0:
+                margin_history.append({"end": r["end"], "val": float(r["val"]) / rev})
+        margin_change_3y = _trend_change(margin_history, 3)
+        margin_change_5y = _trend_change(margin_history, 5)
+
+        debt_change_3y = _trend_change(debt_annual, 3)
+        debt_change_5y = _trend_change(debt_annual, 5)
+
+        latest_revenue = float(revenue_annual[-1]["val"]) if revenue_annual else None
+        latest_operating_income = float(operating_income_annual[-1]["val"]) if operating_income_annual else None
+        operating_margin = (
+            latest_operating_income / latest_revenue
+            if latest_operating_income is not None and latest_revenue and latest_revenue > 0
+            else None
+        )
+
+        tax_annual = _annual_series(facts, tax_expense_tags)
+        pretax_annual = _annual_series(facts, pretax_income_tags)
+        roic_proxy = None
+        if operating_income_annual and debt_annual and equity_annual:
+            op = float(operating_income_annual[-1]["val"])
+            debt_latest = float(debt_annual[-1]["val"])
+            equity_latest = float(equity_annual[-1]["val"])
+            tax_rate = 0.21
+            if tax_annual and pretax_annual:
+                tax = float(tax_annual[-1]["val"])
+                pretax = float(pretax_annual[-1]["val"])
+                if pretax > 0:
+                    tax_rate = max(0.0, min(0.35, tax / pretax))
+            invested_capital = debt_latest + equity_latest
+            if invested_capital > 0:
+                roic_proxy = (op * (1 - tax_rate)) / invested_capital
+
+
         roe = None
         if net_income is not None and equity and float(equity["val"]) > 0:
             roe = net_income / float(equity["val"])
@@ -367,6 +456,18 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "fundamentals_source": "SEC_XBRL_TTM",
             "data_quality": data_quality,
             "fundamentals_error": freshness_flag or None,
+            "revenue_cagr_3y": revenue_cagr_3y,
+            "revenue_cagr_5y": revenue_cagr_5y,
+            "eps_cagr_3y": eps_cagr_3y,
+            "eps_cagr_5y": eps_cagr_5y,
+            "fcf_cagr_3y": fcf_cagr_3y,
+            "fcf_cagr_5y": fcf_cagr_5y,
+            "operating_margin": operating_margin,
+            "margin_change_3y": margin_change_3y,
+            "margin_change_5y": margin_change_5y,
+            "debt_change_3y": debt_change_3y,
+            "debt_change_5y": debt_change_5y,
+            "roic_proxy": roic_proxy,
         }
 
         # E means the underlying financial period is too old to verify.
