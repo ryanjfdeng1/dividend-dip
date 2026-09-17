@@ -49,7 +49,8 @@ def scan_one(symbol: str) -> dict:
 
     (
         total, signal, dip, dividend, quality, valuation,
-        dip_type, buy_stage, risk_flags
+        structural_penalty, value_trap_risk, dip_type, buy_stage,
+        risk_flags, structural_flags
     ) = score_stock(data)
 
     data.update({
@@ -59,6 +60,9 @@ def scan_one(symbol: str) -> dict:
         "dividend_score": dividend,
         "quality_score": quality,
         "valuation_score": valuation,
+        "structural_penalty": structural_penalty,
+        "value_trap_risk": value_trap_risk,
+        "structural_flags": structural_flags,
         "dip_type": dip_type,
         "buy_stage": buy_stage,
         "risk_flags": risk_flags,
@@ -82,7 +86,7 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V1.9 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V2.0 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
     print("SEC fundamentals cache: refresh every 7 days | TTM from latest standalone quarters when available")
@@ -105,7 +109,9 @@ def main():
                 f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s}% | "
                 f"Q={row['quality_score']:2d}/45 | V={row['valuation_score']:2d}/30 | "
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
-                f"Score={row['score']:3d} | {status}/{source} | {sector} | {row['signal']}"
+                f"Score={row['score']:3d} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
+                f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source} | "
+                f"{sector} | {row['signal']}"
                 f"{fundamental_status}"
             )
         except Exception as exc:
@@ -129,7 +135,8 @@ def main():
         "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality",
         "fundamentals_error", "quality_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
-        "buy_stage", "risk_flags", "signal",
+        "buy_stage", "structural_penalty", "value_trap_risk",
+        "structural_flags", "risk_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
