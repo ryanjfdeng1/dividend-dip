@@ -49,7 +49,7 @@ def scan_one(symbol: str) -> dict:
 
     (
         total, signal, dip, dividend, quality, valuation,
-        structural_penalty, value_trap_risk, dip_type, buy_stage,
+        trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         risk_flags, structural_flags
     ) = score_stock(data)
 
@@ -60,6 +60,7 @@ def scan_one(symbol: str) -> dict:
         "dividend_score": dividend,
         "quality_score": quality,
         "valuation_score": valuation,
+        "trend_score": trend_score,
         "structural_penalty": structural_penalty,
         "value_trap_risk": value_trap_risk,
         "structural_flags": structural_flags,
@@ -86,10 +87,10 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V2.0 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V2.1 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
-    print("SEC fundamentals cache: refresh every 7 days | TTM from latest standalone quarters when available")
+    print("SEC fundamentals cache: refresh every 7 days | TTM + 3/5-year trend metrics")
     print("=" * 155)
 
     for symbol in STOCKS:
@@ -132,8 +133,11 @@ def main():
         "eps", "free_cash_flow", "fcf_yield", "shares_outstanding", "roe", "payout_ratio", "pe",
         "revenue", "net_income", "total_assets", "equity", "debt",
         "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
-        "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality",
-        "fundamentals_error", "quality_score", "valuation_score",
+        "revenue_cagr_3y", "revenue_cagr_5y", "eps_cagr_3y", "eps_cagr_5y",
+        "fcf_cagr_3y", "fcf_cagr_5y", "operating_margin",
+        "margin_change_3y", "margin_change_5y", "debt_change_3y", "debt_change_5y",
+        "roic_proxy", "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality",
+        "fundamentals_error", "quality_score", "trend_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
         "structural_flags", "risk_flags", "signal",
