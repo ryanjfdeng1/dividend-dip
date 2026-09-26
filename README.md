@@ -13,8 +13,8 @@ Dividend yield is only a small optional bonus.
 | Component | Weight |
 |---|---:|
 | Quality | 45 |
-| Valuation | 20 |
-| Dip | 30 |
+| Valuation | 30 |
+| Dip | 20 |
 | Dividend | 5 |
 | **Total** | **100** |
 
@@ -127,11 +127,18 @@ The scanner also emits `fundamental_age_days`, `latest_quarter_date`, and `lates
 
 These are research flags, not claims that a company is actually a value trap. The scanner is designed to trigger manual review.
 
-## Next step: V2.1
-Validate structural-risk signals against margins, leverage, ROIC and multi-year business trends where the SEC data is sufficiently reliable.
+## V2.2 multi-horizon price context
 
-No automatic trading is implemented.
+V2.2 adds multi-horizon price context without changing the existing 100-point scoring model:
+- `DD20`: drawdown from the highest closing price in the last 20 trading days.
+- `DD60`: drawdown from the highest closing price in the last 60 trading days.
+- `DD100`: drawdown from the highest closing price in the last 100 trading days.
+- `DD252`: drawdown from the highest closing price in the last 252 trading days (roughly one trading year).
+- `200DMA`: percentage distance between the current close and the 200-day simple moving average.
 
+All drawdown metrics use **closing prices**, not intraday highs. `DD100` remains the primary dip-stage and signal input, so this version does not silently change existing candidate thresholds. `DD252` is a longer-term context metric that helps distinguish a recent pullback from a larger one-year drawdown.
+
+The terminal output now shows DD20/60/100/252 and 200DMA distance, and the CSV includes the corresponding high-water marks and metrics.
 
 ## V2.1 long-term business trend
 
