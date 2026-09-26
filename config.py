@@ -10,14 +10,13 @@ STOCKS = [
     "DIS", "CMCSA", "V", "MA", "PYPL", "SYY", "FDX", "ORLY", "AZO",
 ]
 
-# Companies whose cash-flow statements are not comparable to ordinary
-# industrial/consumer companies for FCF scoring.
 FINANCIALS = {"JPM", "BAC", "WFC", "C", "GS", "MS", "BLK", "SPGI", "MCO", "ICE", "CME", "AON", "MMC", "CB", "PGR", "ALL", "TRV"}
 BANKS = {"JPM", "BAC", "WFC", "C", "GS", "MS"}
 
 LOOKBACK_DAYS = 100
 LOOKBACK_60D = 60
 LOOKBACK_20D = 20
+LOOKBACK_252D = 252
 SMA_LONG = 200
 RSI_PERIOD = 14
 WATCH_SCORE = 45
