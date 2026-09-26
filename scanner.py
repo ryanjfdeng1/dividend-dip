@@ -106,8 +106,10 @@ def main():
                 fundamental_status = f" | {fundamental_status[:45]}"
 
             print(
-                f"OK   {symbol:5s} | DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | "
-                f"RSI={_fmt(row['rsi_14']):>5s} | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s}% | "
+                f"OK   {symbol:5s} | DD20={_fmt(row['drawdown_20d'] * 100):>6s}% | DD60={_fmt(row['drawdown_60d'] * 100):>6s}% | "
+                f"DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | DD252={_fmt(row['drawdown_252d'] * 100):>6s}% | "
+                f"RSI={_fmt(row['rsi_14']):>5s} | 200DMA={_fmt(row.get('distance_200dma') * 100 if pd.notna(row.get('distance_200dma')) else None):>6s}% | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s}% | "
+                
                 f"Q={row['quality_score']:2d}/30 | T={row['trend_score']:2d}/15 | V={row['valuation_score']:2d}/30 | "
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
                 f"Score={row['score']:3d} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
@@ -128,8 +130,9 @@ def main():
     )
 
     columns = [
-        "ticker", "price", "high_100d", "drawdown_100d", "drawdown_60d",
-        "drawdown_20d", "sma_200", "above_200dma", "rsi_14",
+        "ticker", "price", "high_20d", "high_60d", "high_100d", "high_252d",
+        "drawdown_20d", "drawdown_60d", "drawdown_100d", "drawdown_252d",
+        "sma_200", "above_200dma", "distance_200dma", "rsi_14",
         "eps", "free_cash_flow", "fcf_yield", "shares_outstanding", "roe", "payout_ratio", "pe",
         "revenue", "net_income", "total_assets", "equity", "debt",
         "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
