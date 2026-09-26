@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Optional
 
-from config import LOOKBACK_DAYS, LOOKBACK_60D, LOOKBACK_20D, SMA_LONG, RSI_PERIOD
+from config import LOOKBACK_DAYS, LOOKBACK_60D, LOOKBACK_20D, LOOKBACK_252D, SMA_LONG, RSI_PERIOD
 
 
 def calculate_rsi(close: pd.Series, period: int = RSI_PERIOD) -> float:
@@ -50,9 +50,10 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         raise ValueError(f"Not enough price history: {len(close)} trading days")
 
     current = float(close.iloc[-1])
-    high_100d = float(close.tail(LOOKBACK_DAYS).max())
-    high_60d = float(close.tail(LOOKBACK_60D).max())
     high_20d = float(close.tail(LOOKBACK_20D).max())
+    high_60d = float(close.tail(LOOKBACK_60D).max())
+    high_100d = float(close.tail(LOOKBACK_DAYS).max())
+    high_252d = float(close.tail(LOOKBACK_252D).max())
 
     sma_200 = np.nan
     if len(close) >= SMA_LONG:
@@ -60,12 +61,17 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
 
     result = {
         "price": current,
+        "high_20d": high_20d,
+        "high_60d": high_60d,
         "high_100d": high_100d,
-        "drawdown_100d": current / high_100d - 1,
-        "drawdown_60d": current / high_60d - 1,
+        "high_252d": high_252d,
         "drawdown_20d": current / high_20d - 1,
+        "drawdown_60d": current / high_60d - 1,
+        "drawdown_100d": current / high_100d - 1,
+        "drawdown_252d": current / high_252d - 1,
         "sma_200": sma_200,
         "above_200dma": bool(current > sma_200) if pd.notna(sma_200) else None,
+        "distance_200dma": (current / sma_200 - 1) if pd.notna(sma_200) and sma_200 > 0 else np.nan,
         "rsi_14": calculate_rsi(close),
         **calculate_dividend_metrics(history, current),
     }
@@ -107,8 +113,8 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "roic_proxy": fundamentals.get("roic_proxy", np.nan),
     })
 
-    # V1.9 valuation metrics. FCF yield is only used for non-financials;
-    # bank/financial cash-flow structures are not comparable to industrial FCF.
+    # FCF yield is only used for non-financials; bank/financial cash-flow
+    # structures are not comparable to ordinary industrial FCF.
     shares = result["shares_outstanding"]
     fcf = result["free_cash_flow"]
     if pd.notna(shares) and shares > 0 and pd.notna(fcf) and fcf > 0:
@@ -118,14 +124,11 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
     else:
         result["fcf_yield"] = np.nan
 
-    # Derive payout ratio from SEC EPS + trailing annual dividends when the
-    # provider does not supply it directly.
     eps = result["eps"]
     annual_dividend = result["annual_dividend"]
     if pd.isna(result["payout_ratio"]) and pd.notna(eps) and eps > 0 and pd.notna(annual_dividend):
         result["payout_ratio"] = float(annual_dividend / eps)
 
-    # Current P/E is intentionally calculated from price and annual EPS.
     if pd.isna(result["pe"]) and pd.notna(eps) and eps > 0:
         result["pe"] = float(current / eps)
 
