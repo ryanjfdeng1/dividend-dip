@@ -140,12 +140,6 @@ All drawdown metrics use **closing prices**, not intraday highs. `DD100` remains
 
 The terminal output now shows DD20/60/100/252 and 200DMA distance, and the CSV includes the corresponding high-water marks and metrics.
 
-## Next step: V2.1
-Validate structural-risk signals against margins, leverage, ROIC and multi-year business trends where the SEC data is sufficiently reliable.
-
-No automatic trading is implemented.
-
-
 ## V2.1 long-term business trend
 
 V2.1 keeps the 100-point base score but reallocates it to:
