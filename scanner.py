@@ -61,6 +61,8 @@ def scan_one(symbol: str) -> dict:
     ) = score_stock(data)
 
     data.update({
+        "data_status": data.get("data_status") or "INCOMPLETE",
+        "score_status": "SCORED" if total is not None else data.get("data_status") or "INCOMPLETE",
         "score": total,
         "signal": signal,
         "dip_score": dip,
@@ -149,12 +151,21 @@ def main():
         "fcf_cagr_3y", "fcf_cagr_5y", "operating_margin",
         "margin_change_3y", "margin_change_5y", "debt_change_3y", "debt_change_5y",
         "roic_proxy", "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality", "data_status",
-        "fundamentals_error", "quality_score", "trend_score", "valuation_score",
+        "fundamentals_error", "score_status", "quality_score", "trend_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
         "structural_flags", "risk_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
+
+    status_counts = df["data_status"].fillna("INCOMPLETE").value_counts().to_dict()
+    scoreable = int(df["score"].notna().sum())
+    print("\nData quality summary")
+    print("-" * 80)
+    for status in ("OK", "STALE", "ERROR", "INCOMPLETE"):
+        print(f"{status:10s}: {int(status_counts.get(status, 0)):3d}")
+    print(f"{'SCORED':10s}: {scoreable:3d}")
+    print(f"{'ERRORS':10s}: {len(errors):3d}")
 
     print("\nTop candidates")
     print("-" * 200)
