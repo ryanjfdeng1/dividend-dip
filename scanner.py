@@ -70,7 +70,8 @@ def scan_one(symbol: str) -> dict:
     (
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
-        risk_flags, structural_flags, research_flags
+        risk_flags, structural_flags, research_flags,
+        research_score, research_signal, research_confidence
     ) = score_stock(data)
 
     data.update({
@@ -87,6 +88,9 @@ def scan_one(symbol: str) -> dict:
         "value_trap_risk": value_trap_risk,
         "structural_flags": structural_flags,
         "research_flags": research_flags,
+        "research_score": research_score,
+        "research_signal": research_signal,
+        "research_confidence": research_confidence,
         "dip_type": dip_type,
         "buy_stage": buy_stage,
         "risk_flags": risk_flags,
@@ -167,7 +171,8 @@ def main():
         "fundamentals_error", "score_status", "quality_score", "trend_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
-        "structural_flags", "risk_flags", "research_flags", "signal",
+        "structural_flags", "risk_flags", "research_flags",
+        "research_score", "research_signal", "research_confidence", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 

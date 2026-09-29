@@ -362,6 +362,106 @@ def score_stock(row: dict) -> tuple:
     else:
         value_trap_risk = "LOW"
 
+    # V2.5 independent research ranking. This does not alter the legacy score.
+    # Missing metrics are excluded from the denominator and reported via confidence.
+    research_points = 0.0
+    research_possible = 0.0
+
+    if fundamentals_verified:
+        # Dividend safety: 25 points.
+        if dividend_safety == "STRONG":
+            research_points += 25
+            research_possible += 25
+        elif dividend_safety == "OK":
+            research_points += 18
+            research_possible += 25
+        elif dividend_safety == "REVIEW":
+            research_points += 5
+            research_possible += 25
+        elif dividend_safety == "UNKNOWN":
+            research_possible += 25
+
+        # FCF coverage: 25 points.
+        if fcf_payout_ratio is not None:
+            research_possible += 25
+            if fcf_payout_ratio <= 0.50:
+                research_points += 25
+            elif fcf_payout_ratio <= 0.70:
+                research_points += 21
+            elif fcf_payout_ratio <= 0.80:
+                research_points += 17
+            elif fcf_payout_ratio <= 1.00:
+                research_points += 10
+            elif fcf_payout_ratio <= 1.20:
+                research_points += 4
+
+        # ROIC: 20 points. Financial companies get no generic ROIC penalty
+        # when the proxy is unavailable or not economically comparable.
+        if roic_proxy is not None:
+            research_possible += 20
+            if roic_proxy >= 0.20:
+                research_points += 20
+            elif roic_proxy >= 0.15:
+                research_points += 18
+            elif roic_proxy >= 0.10:
+                research_points += 15
+            elif roic_proxy >= 0.06:
+                research_points += 10
+            elif roic_proxy >= 0:
+                research_points += 4
+
+        # Balance sheet: 15 points, omitted for financials.
+        if not is_financial and debt_to_equity is not None:
+            research_possible += 15
+            if debt_to_equity <= 0.75:
+                research_points += 15
+            elif debt_to_equity <= 1.50:
+                research_points += 12
+            elif debt_to_equity <= 2.00:
+                research_points += 9
+            elif debt_to_equity <= 3.00:
+                research_points += 4
+
+        # Long-term business trend: 15 points.
+        trend_available = 0
+        trend_points = 0
+        for value, strong, good in (
+            (revenue_cagr_5y, 0.08, 0.03),
+            (eps_cagr_5y, 0.10, 0.05),
+            (fcf_cagr_5y, 0.10, 0.05),
+        ):
+            if value is not None:
+                trend_available += 1
+                trend_points += 5 if value >= strong else 3 if value >= good else 1 if value >= 0 else 0
+        if margin_change_5y is not None:
+            trend_available += 1
+            trend_points += 5 if margin_change_5y >= 0.10 else 3 if margin_change_5y >= 0 else 1 if margin_change_5y > -0.10 else 0
+        if trend_available:
+            research_possible += 15
+            research_points += min(15, trend_points * 15 / (trend_available * 5))
+
+    research_score = (
+        round(research_points / research_possible * 100, 1)
+        if research_possible >= 60
+        else None
+    )
+    research_confidence = (
+        round(research_possible / 100 * 100)
+        if fundamentals_verified
+        else 0
+    )
+
+    if research_score is None:
+        research_signal = "RESEARCH INCOMPLETE"
+    elif research_score >= 80:
+        research_signal = "RESEARCH STRONG"
+    elif research_score >= 65:
+        research_signal = "RESEARCH PASS"
+    elif research_score >= 50:
+        research_signal = "RESEARCH REVIEW"
+    else:
+        research_signal = "RESEARCH RISK"
+
     total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
     # Never expose a misleading total score when fundamentals are stale,
@@ -420,5 +520,6 @@ def score_stock(row: dict) -> tuple:
     return (
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
-        ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags)
+        ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags),
+        research_score, research_signal, research_confidence
     )
