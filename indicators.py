@@ -81,6 +81,7 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "fundamentals_available": bool(fundamentals.get("fundamentals_available")),
         "fundamentals_source": fundamentals.get("fundamentals_source"),
         "data_quality": fundamentals.get("data_quality"),
+        "data_status": fundamentals.get("data_status"),
         "fundamentals_error": fundamentals.get("fundamentals_error"),
         "eps": fundamentals.get("eps", np.nan),
         "free_cash_flow": fundamentals.get("free_cash_flow", np.nan),
@@ -113,8 +114,6 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "roic_proxy": fundamentals.get("roic_proxy", np.nan),
     })
 
-    # FCF yield is only used for non-financials; bank/financial cash-flow
-    # structures are not comparable to ordinary industrial FCF.
     shares = result["shares_outstanding"]
     fcf = result["free_cash_flow"]
     if pd.notna(shares) and shares > 0 and pd.notna(fcf) and fcf > 0:
