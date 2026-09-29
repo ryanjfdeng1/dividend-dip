@@ -454,9 +454,15 @@ def score_stock(row: dict) -> tuple:
     if research_score is None:
         research_signal = "RESEARCH INCOMPLETE"
     elif research_confidence < 75:
-        # A high normalized score with substantial missing research inputs
-        # should not be presented as a strong research conclusion.
+        # Substantial missing inputs should not be presented as a strong
+        # research conclusion, even when the normalized score is high.
         research_signal = "RESEARCH REVIEW" if research_score >= 65 else "RESEARCH RISK"
+    elif research_confidence < 85:
+        # 75-84% coverage is useful for screening, but not enough for the
+        # strongest research label.
+        research_signal = "RESEARCH PASS" if research_score >= 65 else (
+            "RESEARCH REVIEW" if research_score >= 50 else "RESEARCH RISK"
+        )
     elif research_score >= 80:
         research_signal = "RESEARCH STRONG"
     elif research_score >= 65:
@@ -465,6 +471,49 @@ def score_stock(row: dict) -> tuple:
         research_signal = "RESEARCH REVIEW"
     else:
         research_signal = "RESEARCH RISK"
+
+    # V2.6 candidate layer: combine research quality with a meaningful price
+    # drawdown. This is intentionally independent from the legacy score.
+    # Candidate score is only populated when the stock has verified
+    # fundamentals, >=75% research coverage, and at least a 10% 100-day dip.
+    candidate_score = None
+    candidate_signal = "NOT_ELIGIBLE"
+    if (
+        fundamentals_verified
+        and research_score is not None
+        and research_confidence >= 75
+        and dd100 is not None
+        and dd100 <= -0.10
+    ):
+        # 50 pts research quality.
+        quality_component = research_score * 0.50
+
+        # 30 pts drawdown depth: 12 pts at -10%, scaling to 30 pts at -30%.
+        dip_component = min(30.0, 12.0 + max(0.0, (-dd100 - 0.10) / 0.20) * 18.0)
+
+        # 10 pts data coverage.
+        confidence_component = min(10.0, research_confidence / 100.0 * 10.0)
+
+        # 10 pts structural risk: LOW=10, MEDIUM=5, HIGH=0.
+        risk_component = {
+            "LOW": 10.0,
+            "MEDIUM": 5.0,
+            "HIGH": 0.0,
+        }.get(value_trap_risk, 0.0)
+
+        candidate_score = round(
+            quality_component + dip_component + confidence_component + risk_component,
+            1,
+        )
+
+        if candidate_score >= 80:
+            candidate_signal = "HIGH_QUALITY_DIP"
+        elif candidate_score >= 70:
+            candidate_signal = "QUALITY_DIP"
+        elif candidate_score >= 60:
+            candidate_signal = "WATCHLIST_DIP"
+        else:
+            candidate_signal = "WEAK_DIP"
 
     total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
@@ -525,5 +574,6 @@ def score_stock(row: dict) -> tuple:
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags),
-        research_score, research_signal, research_confidence
+        research_score, research_signal, research_confidence,
+        candidate_score, candidate_signal
     )

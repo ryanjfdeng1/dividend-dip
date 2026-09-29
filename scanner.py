@@ -71,7 +71,8 @@ def scan_one(symbol: str) -> dict:
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         risk_flags, structural_flags, research_flags,
-        research_score, research_signal, research_confidence
+        research_score, research_signal, research_confidence,
+        candidate_score, candidate_signal
     ) = score_stock(data)
 
     data.update({
@@ -91,6 +92,8 @@ def scan_one(symbol: str) -> dict:
         "research_score": research_score,
         "research_signal": research_signal,
         "research_confidence": research_confidence,
+        "candidate_score": candidate_score,
+        "candidate_signal": candidate_signal,
         "dip_type": dip_type,
         "buy_stage": buy_stage,
         "risk_flags": risk_flags,
@@ -168,6 +171,20 @@ def main():
         )
         df.loc[ranked.index, "research_rank"] = range(1, len(ranked) + 1)
 
+    
+    # Candidate ranking is the intersection of verified research quality and
+    # a meaningful 100-day drawdown. Stocks without a qualifying dip are not
+    # ranked as candidates.
+    df["candidate_rank"] = pd.NA
+    candidate_mask = df["candidate_score"].notna()
+    if candidate_mask.any():
+        ranked = df.loc[candidate_mask].sort_values(
+            ["candidate_score", "research_score", "drawdown_100d"],
+            ascending=[False, False, True],
+            na_position="last",
+        )
+        df.loc[ranked.index, "candidate_rank"] = range(1, len(ranked) + 1)
+
     columns = [
         "ticker", "price", "high_20d", "high_60d", "high_100d", "high_252d",
         "drawdown_20d", "drawdown_60d", "drawdown_100d", "drawdown_252d",
@@ -183,7 +200,8 @@ def main():
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
         "structural_flags", "risk_flags", "research_flags",
-        "research_score", "research_signal", "research_confidence", "research_rank", "signal",
+        "research_score", "research_signal", "research_confidence", "research_rank",
+        "candidate_score", "candidate_signal", "candidate_rank", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
