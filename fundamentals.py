@@ -124,12 +124,14 @@ def get_fundamentals(symbol: str) -> dict:
     except Exception as exc:
         return {
             "fundamentals_available": False,
+            "data_status": "ERROR",
             "fundamentals_error": str(exc),
         }
 
     if not isinstance(payload, list) or not payload:
         return {
             "fundamentals_available": False,
+            "data_status": "ERROR",
             "fundamentals_error": "No statement data returned",
         }
 
@@ -150,6 +152,7 @@ def get_fundamentals(symbol: str) -> dict:
         "pe": None,
         "fundamental_date": latest.get("date"),
         "fundamentals_source": "tiingo",
+        "data_status": "OK",
     }
 
     # PE is price-sensitive, so refresh it separately only when the
