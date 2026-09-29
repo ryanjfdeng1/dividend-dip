@@ -473,6 +473,9 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         # E means the underlying financial period is too old to verify.
         if data_quality == "E":
             result["fundamentals_available"] = False
+            result["data_status"] = "STALE"
+        else:
+            result["data_status"] = "OK"
 
         _save_cache(symbol, result)
         return result
@@ -483,4 +486,5 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "fundamentals_source": "SEC_ERROR",
             "fundamentals_error": str(exc),
             "data_quality": "E",
+            "data_status": "ERROR",
         }
