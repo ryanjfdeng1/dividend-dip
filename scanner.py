@@ -154,11 +154,7 @@ def main():
     if not rows:
         raise RuntimeError("No stocks could be scanned.")
 
-    df = pd.DataFrame(rows).sort_values(
-        ["score", "quality_score", "drawdown_100d"],
-        ascending=[False, False, True],
-        na_position="last",
-    )
+    df = pd.DataFrame(rows)
 
     # Research ranking is independent from the legacy score.
     df["research_rank"] = pd.NA
@@ -204,6 +200,19 @@ def main():
         return "NOT_ELIGIBLE"
 
     df["candidate_eligibility_reason"] = df.apply(candidate_eligibility_reason, axis=1)
+
+    # Export order follows the scanner's primary decision hierarchy:
+    # eligible candidates first by Candidate Rank, then non-candidates by
+    # Research Rank / Research Score. This makes the CSV useful at first glance.
+    df["_candidate_sort"] = df["candidate_rank"].notna().map({True: 0, False: 1})
+    df["_candidate_rank_sort"] = df["candidate_rank"].fillna(float("inf"))
+    df["_research_rank_sort"] = df["research_rank"].fillna(float("inf"))
+    df = df.sort_values(
+        ["_candidate_sort", "_candidate_rank_sort", "_research_rank_sort",
+         "research_score", "score", "ticker"],
+        ascending=[True, True, True, False, False, True],
+        na_position="last",
+    ).drop(columns=["_candidate_sort", "_candidate_rank_sort", "_research_rank_sort"])
 
     # Human-first column order: decision fields first, then market state,
     # research quality, legacy score components, risks, data quality, raw data.
