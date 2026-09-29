@@ -37,6 +37,13 @@ def get_fundamentals(symbol: str) -> dict:
             return tiingo
 
     sec["data_quality"] = sec.get("data_quality", "D")
+    if sec.get("data_status") is None:
+        if sec.get("data_quality") == "E":
+            sec["data_status"] = "STALE"
+        elif sec.get("fundamentals_source") == "SEC_ERROR":
+            sec["data_status"] = "ERROR"
+        else:
+            sec["data_status"] = "INCOMPLETE"
     return sec
 
 
