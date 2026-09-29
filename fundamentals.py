@@ -114,6 +114,7 @@ def get_fundamentals(symbol: str) -> dict:
     if cached is not None:
         cached.pop("_cached_on", None)
         cached["fundamentals_source"] = "cache"
+        cached.setdefault("data_status", "OK")
         return cached
 
     try:
