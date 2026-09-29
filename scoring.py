@@ -482,9 +482,11 @@ def score_stock(row: dict) -> tuple:
     if (
         fundamentals_verified
         and research_score is not None
+        and research_score >= 65
         and research_confidence >= 75
         and dd100 is not None
         and dd100 <= -0.10
+        and value_trap_risk != "HIGH"
     ):
         # 50 pts research quality.
         quality_component = research_score * 0.50
