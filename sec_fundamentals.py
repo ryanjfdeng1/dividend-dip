@@ -12,7 +12,7 @@ CACHE_DIR = Path("data")
 CACHE_DIR.mkdir(exist_ok=True)
 
 SEC_CACHE_DAYS = int(os.getenv("SEC_CACHE_DAYS", "7"))
-FUNDAMENTALS_VERSION = "2.3.1"
+FUNDAMENTALS_VERSION = "2.4.1"
 SEC_DELAY = float(os.getenv("SEC_REQUEST_DELAY", "0.15"))
 
 # Freshness is based on the period covered by the financial data, not merely
