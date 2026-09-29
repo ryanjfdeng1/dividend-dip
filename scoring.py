@@ -475,7 +475,8 @@ def score_stock(row: dict) -> tuple:
     # V2.6 candidate layer: combine research quality with a meaningful price
     # drawdown. This is intentionally independent from the legacy score.
     # Candidate score is only populated when the stock has verified
-    # fundamentals, >=75% research coverage, and at least a 10% 100-day dip.
+    # fundamentals, research quality >=65, >=75% research coverage, a
+    # meaningful 100-day dip, and no HIGH structural-risk classification.
     candidate_score = None
     candidate_signal = "NOT_ELIGIBLE"
     if (
@@ -494,11 +495,10 @@ def score_stock(row: dict) -> tuple:
         # 10 pts data coverage.
         confidence_component = min(10.0, research_confidence / 100.0 * 10.0)
 
-        # 10 pts structural risk: LOW=10, MEDIUM=5, HIGH=0.
+        # 10 pts structural risk: LOW=10, MEDIUM=5.
         risk_component = {
             "LOW": 10.0,
             "MEDIUM": 5.0,
-            "HIGH": 0.0,
         }.get(value_trap_risk, 0.0)
 
         candidate_score = round(
