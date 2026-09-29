@@ -29,10 +29,10 @@ def _normalize_data_status(data: dict) -> dict:
             data["data_status"] = "OK"
         return data
 
-    if data.get("data_quality") == "E":
-        data["data_status"] = "STALE"
-    elif data.get("fundamentals_source") == "SEC_ERROR":
+    if data.get("fundamentals_source") == "SEC_ERROR":
         data["data_status"] = "ERROR"
+    elif data.get("data_quality") == "E":
+        data["data_status"] = "STALE"
     else:
         data["data_status"] = "INCOMPLETE"
     return data
