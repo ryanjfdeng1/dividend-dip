@@ -22,29 +22,38 @@ def _has_usable_fundamentals(data: dict) -> bool:
     )
 
 
+def _normalize_data_status(data: dict) -> dict:
+    """V2.3.1: never report OK when fundamentals are not actually usable."""
+    if _has_usable_fundamentals(data):
+        if data.get("data_status") is None:
+            data["data_status"] = "OK"
+        return data
+
+    if data.get("fundamentals_source") == "SEC_ERROR":
+        data["data_status"] = "ERROR"
+    elif data.get("data_quality") == "E":
+        data["data_status"] = "STALE"
+    else:
+        data["data_status"] = "INCOMPLETE"
+    return data
+
+
 def get_fundamentals(symbol: str) -> dict:
     # V1.7: SEC XBRL is the primary source and requires no API key.
-    sec = get_sec_fundamentals(symbol)
+    sec = _normalize_data_status(get_sec_fundamentals(symbol))
     if _has_usable_fundamentals(sec):
         return sec
 
     # Keep Tiingo as a fallback for accounts that already have Fundamentals
     # access. This prevents a temporary SEC/API problem from blocking a scan.
     if os.getenv("TIINGO_API_KEY"):
-        tiingo = get_tiingo_fundamentals(symbol)
+        tiingo = _normalize_data_status(get_tiingo_fundamentals(symbol))
         if _has_usable_fundamentals(tiingo):
             tiingo["data_quality"] = "B"
+            tiingo["data_status"] = "OK"
             return tiingo
 
-    sec["data_quality"] = sec.get("data_quality", "D")
-    if sec.get("data_status") is None:
-        if sec.get("data_quality") == "E":
-            sec["data_status"] = "STALE"
-        elif sec.get("fundamentals_source") == "SEC_ERROR":
-            sec["data_status"] = "ERROR"
-        else:
-            sec["data_status"] = "INCOMPLETE"
-    return sec
+    return _normalize_data_status(sec)
 
 
 def scan_one(symbol: str) -> dict:
@@ -54,6 +63,11 @@ def scan_one(symbol: str) -> dict:
     data["ticker"] = symbol
     data["date"] = datetime.now().date().isoformat()
 
+    # calculate_metrics passes fundamentals.data_status through to the row.
+    # Re-normalize here as a defensive boundary so an unusable fundamentals
+    # payload can never become an apparently verified OK row.
+    data = _normalize_data_status(data)
+
     (
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
@@ -61,6 +75,8 @@ def scan_one(symbol: str) -> dict:
     ) = score_stock(data)
 
     data.update({
+        "data_status": data.get("data_status") or "INCOMPLETE",
+        "score_status": "SCORED" if total is not None else "UNSCORED",
         "score": total,
         "signal": signal,
         "dip_score": dip,
@@ -116,8 +132,7 @@ def main():
             print(
                 f"OK   {symbol:5s} | DD20={_fmt(row['drawdown_20d'] * 100):>6s}% | DD60={_fmt(row['drawdown_60d'] * 100):>6s}% | "
                 f"DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | DD252={_fmt(row['drawdown_252d'] * 100):>6s}% | "
-                f"RSI={_fmt(row['rsi_14']):>5s} | 200DMA={_fmt(row.get('distance_200dma') * 100 if pd.notna(row.get('distance_200dma')) else None):>6s}% | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s}% | "
-                
+                f"RSI={_fmt(row['rsi_14']):>5s} | 200DMA={_fmt(row.get('distance_200dma') * 100 if pd.notna(row.get('distance_200dma')) else None):>6s}% | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s} | "
                 f"Q={row['quality_score']:2d}/30 | T={row['trend_score']:2d}/15 | V={row['valuation_score']:2d}/30 | "
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
                 f"Score={_fmt(row['score'], 0):>3s} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
@@ -149,12 +164,21 @@ def main():
         "fcf_cagr_3y", "fcf_cagr_5y", "operating_margin",
         "margin_change_3y", "margin_change_5y", "debt_change_3y", "debt_change_5y",
         "roic_proxy", "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality", "data_status",
-        "fundamentals_error", "quality_score", "trend_score", "valuation_score",
+        "fundamentals_error", "score_status", "quality_score", "trend_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
         "structural_flags", "risk_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
+
+    status_counts = df["data_status"].fillna("INCOMPLETE").value_counts().to_dict()
+    scoreable = int(df["score"].notna().sum())
+    print("\nData quality summary")
+    print("-" * 80)
+    for status in ("OK", "STALE", "ERROR", "INCOMPLETE"):
+        print(f"{status:10s}: {int(status_counts.get(status, 0)):3d}")
+    print(f"{'SCORED':10s}: {scoreable:3d}")
+    print(f"{'ERRORS':10s}: {len(errors):3d}")
 
     print("\nTop candidates")
     print("-" * 200)

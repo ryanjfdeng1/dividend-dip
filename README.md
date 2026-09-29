@@ -19,7 +19,7 @@ Dividend yield is only a small optional bonus.
 | Dividend | 5 |
 | **Total** | **100** |
 
-## V2.0 fundamental-data architecture
+## Fundamental-data architecture
 
 The V1.7+ pipeline uses:
 
@@ -108,9 +108,9 @@ Alpha Vantage also provides standardized fundamental endpoints for company overv
 
 These are research labels, not automatic trading instructions.
 
-## V2.0 structural-risk / value-trap detection
+## Structural-risk / value-trap detection
 
-V2.0 keeps the original 100-point base score (Quality 45 + Valuation 30 + Dip 20 + Dividend 5), then applies a separate structural-risk penalty of up to 20 points. The report exposes the penalty instead of hiding it.
+The current V2.3 score uses the 100-point base model above, then applies a separate structural-risk penalty of up to 20 points. The report exposes the penalty instead of hiding it.
 - <=120 days: full quality/valuation weight
 - 121-210 days: 90%
 - 211-270 days: 75%
@@ -130,7 +130,7 @@ The scanner also emits `fundamental_age_days`, `latest_quarter_date`, and `lates
 
 These are research flags, not claims that a company is actually a value trap. The scanner is designed to trigger manual review.
 
-## V2.2 multi-horizon price context
+## Multi-horizon price context
 
 V2.2 adds multi-horizon price context without changing the existing 100-point scoring model:
 - `DD20`: drawdown from the highest closing price in the last 20 trading days.
@@ -143,7 +143,7 @@ All drawdown metrics use **closing prices**, not intraday highs. `DD100` remains
 
 The terminal output now shows DD20/60/100/252 and 200DMA distance, and the CSV includes the corresponding high-water marks and metrics.
 
-## V2.1 long-term business trend
+## Long-term business trend
 
 V2.1 keeps the 100-point base score but reallocates it to:
 - Quality: 30
@@ -170,3 +170,16 @@ Long-term deterioration can also add to the separate structural-risk penalty:
 - rapid debt growth
 
 The scanner should treat these as research flags rather than automatic conclusions about a business. SEC Company Facts provides historical XBRL facts through the public data API.
+
+## V2.3 data-quality verification
+
+V2.3 separates **data availability**, **data freshness**, and **scoreability**.
+
+- `data_status=OK` — fundamentals passed freshness and completeness checks and the row can receive a numeric total score.
+- `data_status=STALE` — fundamentals exist but are too old to verify; `score` is blank.
+- `data_status=ERROR` — retrieval failed; `score` is blank.
+- `data_status=INCOMPLETE` — required fundamental inputs are insufficient; `score` is blank.
+- Component scores remain visible for diagnostics, but unverified rows are excluded from the scored ranking.
+- `score_status` is `SCORED` for verified rows and otherwise records the data status.
+- SEC freshness is based on the **latest usable reporting period**. Earlier versions used the oldest available component date, which could incorrectly make otherwise current TTM data appear stale.
+- The SEC fundamentals cache version is bumped when extraction logic changes so old cached fundamentals are not silently reused.
