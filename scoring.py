@@ -51,6 +51,9 @@ def score_stock(row: dict) -> tuple:
     debt_change_3y = _num(row.get("debt_change_3y"))
     debt_change_5y = _num(row.get("debt_change_5y"))
     roic_proxy = _num(row.get("roic_proxy"))
+    debt_to_equity = _num(row.get("debt_to_equity"))
+    fcf_payout_ratio = _num(row.get("fcf_payout_ratio"))
+    dividend_safety = row.get("dividend_safety")
 
     quality = 0
     if eps is not None and eps > 0:
@@ -320,6 +323,36 @@ def score_stock(row: dict) -> tuple:
 
     structural_penalty = min(20, structural_penalty)
 
+    # Research-stage diagnostics. These do not change the existing score.
+    research_flags = []
+    if fundamentals_verified:
+        if debt_to_equity is not None and not is_financial:
+            if debt_to_equity > 3.0:
+                research_flags.append("HIGH_DEBT_EQUITY")
+            elif debt_to_equity > 2.0:
+                research_flags.append("ELEVATED_DEBT_EQUITY")
+        if fcf_payout_ratio is not None:
+            if fcf_payout_ratio > 1.0:
+                research_flags.append("DIVIDEND_GT_FCF")
+            elif fcf_payout_ratio > 0.80:
+                research_flags.append("HIGH_FCF_PAYOUT")
+        if dividend_safety == "REVIEW":
+            research_flags.append("DIVIDEND_SAFETY_REVIEW")
+        elif dividend_safety == "UNKNOWN":
+            research_flags.append("DIVIDEND_SAFETY_UNKNOWN")
+        if roic_proxy is not None and roic_proxy < 0.06:
+            research_flags.append("LOW_ROIC")
+        if revenue_cagr_5y is not None and revenue_cagr_5y < 0:
+            research_flags.append("REVENUE_5Y_DECLINE")
+        if eps_cagr_5y is not None and eps_cagr_5y < 0:
+            research_flags.append("EPS_5Y_DECLINE")
+        if fcf_cagr_5y is not None and fcf_cagr_5y < 0:
+            research_flags.append("FCF_5Y_DECLINE")
+        if margin_change_5y is not None and margin_change_5y < -0.10:
+            research_flags.append("MARGIN_COMPRESSION")
+    else:
+        research_flags.append("FUNDAMENTALS_NOT_VERIFIED")
+
     if not fundamentals_verified:
         value_trap_risk = "UNKNOWN"
     elif structural_penalty >= 12:
@@ -387,5 +420,5 @@ def score_stock(row: dict) -> tuple:
     return (
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
-        ",".join(risk_flags), ",".join(structural_flags)
+        ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags)
     )
