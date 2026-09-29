@@ -15,11 +15,17 @@ load_dotenv()
 
 
 def _has_usable_fundamentals(data: dict) -> bool:
-    return bool(data.get("fundamentals_available")) and (
-        data.get("eps") is not None
-        or data.get("free_cash_flow") is not None
-        or data.get("revenue") is not None
-    )
+    """Return True only when at least one core fundamental is a real number."""
+    if not bool(data.get("fundamentals_available")):
+        return False
+    for key in ("eps", "free_cash_flow", "revenue"):
+        value = data.get(key)
+        try:
+            if value is not None and pd.notna(value) and float(value) == float(value):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def _normalize_data_status(data: dict) -> dict:
@@ -64,7 +70,7 @@ def scan_one(symbol: str) -> dict:
     (
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
-        risk_flags, structural_flags
+        risk_flags, structural_flags, research_flags
     ) = score_stock(data)
 
     data.update({
@@ -80,6 +86,7 @@ def scan_one(symbol: str) -> dict:
         "structural_penalty": structural_penalty,
         "value_trap_risk": value_trap_risk,
         "structural_flags": structural_flags,
+        "research_flags": research_flags,
         "dip_type": dip_type,
         "buy_stage": buy_stage,
         "risk_flags": risk_flags,
@@ -123,7 +130,7 @@ def main():
                 fundamental_status = f" | {fundamental_status[:45]}"
 
             print(
-                f"OK   {symbol:5s} | DD20={_fmt(row['drawdown_20d'] * 100):>6s}% | DD60={_fmt(row['drawdown_60d'] * 100):>6s}% | "
+                f"{row.get('data_status', 'INCOMPLETE'):10s} {symbol:5s} | DD20={_fmt(row['drawdown_20d'] * 100):>6s}% | DD60={_fmt(row['drawdown_60d'] * 100):>6s}% | "
                 f"DD100={_fmt(row['drawdown_100d'] * 100):>6s}% | DD252={_fmt(row['drawdown_252d'] * 100):>6s}% | "
                 f"RSI={_fmt(row['rsi_14']):>5s} | 200DMA={_fmt(row.get('distance_200dma') * 100 if pd.notna(row.get('distance_200dma')) else None):>6s}% | PE={_fmt(row['pe']):>5s} | FCFY={_fmt(row.get('fcf_yield') * 100 if pd.notna(row.get('fcf_yield')) else None):>5s} | "
                 f"Q={row['quality_score']:2d}/30 | T={row['trend_score']:2d}/15 | V={row['valuation_score']:2d}/30 | "
@@ -151,8 +158,8 @@ def main():
         "drawdown_20d", "drawdown_60d", "drawdown_100d", "drawdown_252d",
         "sma_200", "above_200dma", "distance_200dma", "rsi_14",
         "eps", "free_cash_flow", "fcf_yield", "shares_outstanding", "roe", "payout_ratio", "pe",
-        "revenue", "net_income", "total_assets", "equity", "debt",
-        "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth",
+        "revenue", "net_income", "total_assets", "equity", "debt", "debt_to_equity",
+        "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth", "fcf_payout_ratio", "dividend_safety",
         "revenue_cagr_3y", "revenue_cagr_5y", "eps_cagr_3y", "eps_cagr_5y",
         "fcf_cagr_3y", "fcf_cagr_5y", "operating_margin",
         "margin_change_3y", "margin_change_5y", "debt_change_3y", "debt_change_5y",
@@ -160,7 +167,7 @@ def main():
         "fundamentals_error", "score_status", "quality_score", "trend_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
-        "structural_flags", "risk_flags", "signal",
+        "structural_flags", "risk_flags", "research_flags", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
