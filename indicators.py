@@ -134,9 +134,18 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
     if pd.isna(result["payout_ratio"]) and pd.notna(eps) and eps > 0 and pd.notna(annual_dividend):
         result["payout_ratio"] = float(annual_dividend / eps)
 
-    fcf = result["free_cash_flow"]
-    if pd.notna(fcf) and fcf > 0 and pd.notna(annual_dividend):
-        result["fcf_payout_ratio"] = float(annual_dividend / fcf)
+    # FCF is a company-level amount while annual_dividend is per share.
+    # Convert dividends to total cash paid before calculating FCF payout.
+    shares = result["shares_outstanding"]
+    if (
+        pd.notna(fcf)
+        and fcf > 0
+        and pd.notna(annual_dividend)
+        and pd.notna(shares)
+        and shares > 0
+    ):
+        total_dividends = annual_dividend * shares
+        result["fcf_payout_ratio"] = float(total_dividends / fcf)
     else:
         result["fcf_payout_ratio"] = np.nan
 

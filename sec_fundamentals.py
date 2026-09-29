@@ -285,6 +285,7 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         cfo, cfo_date = _ttm_value(facts, cfo_tags)
         capex, capex_date = _ttm_value(facts, capex_tags)
         eps, eps_date = _ttm_value(facts, eps_tags)
+        operating_income_ttm, operating_income_ttm_date = _ttm_value(facts, operating_income_tags)
 
         # Fallback to annual data when a company does not expose enough
         # standalone quarterly XBRL observations.
@@ -383,10 +384,13 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         tax_annual = _annual_series(facts, tax_expense_tags)
         pretax_annual = _annual_series(facts, pretax_income_tags)
         roic_proxy = None
-        if operating_income_annual and debt_annual and equity_annual:
+        # Prefer TTM operating income with the latest balance-sheet capital.
+        op = operating_income_ttm
+        if op is None and operating_income_annual:
             op = float(operating_income_annual[-1]["val"])
-            debt_latest = float(debt_annual[-1]["val"])
-            equity_latest = float(equity_annual[-1]["val"])
+        if op is not None and equity and float(equity["val"]) > 0:
+            debt_latest = float((debt_current or {}).get("val", 0)) + float((debt_long or {}).get("val", 0))
+            equity_latest = float(equity["val"])
             tax_rate = 0.21
             if tax_annual and pretax_annual:
                 tax = float(tax_annual[-1]["val"])
