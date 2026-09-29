@@ -69,7 +69,7 @@ def _consume_tiingo_request() -> None:
 
 
 def _request_tiingo(symbol: str):
-    start = date.today() - timedelta(days=800)
+    start = date.today() - timedelta(days=1200)
     _consume_tiingo_request()
 
     try:
@@ -98,7 +98,7 @@ def _get_tiingo_history(symbol: str) -> pd.DataFrame:
     if (
         not cached.empty
         and cached.index.max() >= today - pd.Timedelta(days=4)
-        and len(cached) >= 200
+        and len(cached) >= 700
     ):
         return cached
 

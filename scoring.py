@@ -503,8 +503,21 @@ def score_stock(row: dict) -> tuple:
             "MEDIUM": 5.0,
         }.get(value_trap_risk, 0.0)
 
+        trend_regime = row.get("trend_regime")
+        trend_risk_penalty = 0.0
+        if trend_regime == "MULTI_YEAR_DECLINE":
+            trend_risk_penalty = 15.0
+        elif trend_regime == "LONG_TERM_DOWNTREND":
+            trend_risk_penalty = 8.0
+        elif trend_regime == "NORMAL_CORRECTION":
+            trend_risk_penalty = 2.0
+
         candidate_score = round(
-            quality_component + dip_component + confidence_component + risk_component,
+            max(
+                0.0,
+                quality_component + dip_component + confidence_component
+                + risk_component - trend_risk_penalty,
+            ),
             1,
         )
 

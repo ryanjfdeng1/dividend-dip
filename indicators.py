@@ -55,6 +55,20 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
     high_100d = float(close.tail(LOOKBACK_DAYS).max())
     high_252d = float(close.tail(LOOKBACK_252D).max())
 
+    lookback_3y = min(len(close), 756)
+    high_3y = float(close.tail(lookback_3y).max())
+    price_3y_ago = float(close.iloc[-lookback_3y])
+    drawdown_3y = current / high_3y - 1
+    return_3y = current / price_3y_ago - 1
+    if return_3y <= -0.30:
+        trend_regime = "MULTI_YEAR_DECLINE"
+    elif return_3y < 0:
+        trend_regime = "LONG_TERM_DOWNTREND"
+    elif drawdown_3y <= -0.20:
+        trend_regime = "NORMAL_CORRECTION"
+    else:
+        trend_regime = "HEALTHY_TREND"
+
     sma_200 = np.nan
     if len(close) >= SMA_LONG:
         sma_200 = float(close.rolling(SMA_LONG).mean().iloc[-1])
@@ -69,6 +83,10 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "drawdown_60d": current / high_60d - 1,
         "drawdown_100d": current / high_100d - 1,
         "drawdown_252d": current / high_252d - 1,
+        "high_3y": high_3y,
+        "drawdown_3y": drawdown_3y,
+        "return_3y": return_3y,
+        "trend_regime": trend_regime,
         "sma_200": sma_200,
         "above_200dma": bool(current > sma_200) if pd.notna(sma_200) else None,
         "distance_200dma": (current / sma_200 - 1) if pd.notna(sma_200) and sma_200 > 0 else np.nan,
