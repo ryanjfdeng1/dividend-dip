@@ -12,14 +12,13 @@ def _num(value):
 
 
 def score_stock(row: dict) -> tuple:
-    """V2.0 Quality Dip score with a separate structural-decline / value-trap check.
+    """V2.3 Quality Dip score with explicit fundamental-data verification.
 
-    Base score remains 100 points:
-    Quality 45 + Valuation 30 + Dip 20 + Dividend 5.
+    Base score: Quality 30 + Long-term business trend 15 + Valuation 30
+    + Dip 20 + Dividend 5 = 100 points.
 
     Structural risk is reported separately and can reduce the final score by
-    up to 20 points. This helps distinguish a cheap quality dip from a
-    potentially deteriorating business.
+    up to 20 points. Only data_status == "OK" rows receive a numeric total.
     """
     eps = _num(row.get("eps"))
     fcf = _num(row.get("free_cash_flow"))
