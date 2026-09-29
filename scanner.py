@@ -37,6 +37,13 @@ def get_fundamentals(symbol: str) -> dict:
             return tiingo
 
     sec["data_quality"] = sec.get("data_quality", "D")
+    if sec.get("data_status") is None:
+        if sec.get("data_quality") == "E":
+            sec["data_status"] = "STALE"
+        elif sec.get("fundamentals_source") == "SEC_ERROR":
+            sec["data_status"] = "ERROR"
+        else:
+            sec["data_status"] = "INCOMPLETE"
     return sec
 
 
@@ -87,10 +94,11 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V2.2 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V2.3 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
     print("SEC fundamentals cache: refresh every 7 days | TTM + 3/5-year trend metrics")
+    print("Data quality: OK scored | STALE/ERROR/INCOMPLETE excluded from ranking")
     print("=" * 155)
 
     for symbol in STOCKS:
@@ -112,8 +120,8 @@ def main():
                 
                 f"Q={row['quality_score']:2d}/30 | T={row['trend_score']:2d}/15 | V={row['valuation_score']:2d}/30 | "
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
-                f"Score={row['score']:3d} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
-                f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source} | "
+                f"Score={_fmt(row['score'], 0):>3s} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
+                f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source}/{row.get('data_status', 'INCOMPLETE')} | "
                 f"{sector} | {row['signal']}"
                 f"{fundamental_status}"
             )
@@ -127,6 +135,7 @@ def main():
     df = pd.DataFrame(rows).sort_values(
         ["score", "quality_score", "drawdown_100d"],
         ascending=[False, False, True],
+        na_position="last",
     )
 
     columns = [
@@ -139,7 +148,7 @@ def main():
         "revenue_cagr_3y", "revenue_cagr_5y", "eps_cagr_3y", "eps_cagr_5y",
         "fcf_cagr_3y", "fcf_cagr_5y", "operating_margin",
         "margin_change_3y", "margin_change_5y", "debt_change_3y", "debt_change_5y",
-        "roic_proxy", "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality",
+        "roic_proxy", "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality", "data_status",
         "fundamentals_error", "quality_score", "trend_score", "valuation_score",
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",

@@ -12,7 +12,7 @@ CACHE_DIR = Path("data")
 CACHE_DIR.mkdir(exist_ok=True)
 
 SEC_CACHE_DAYS = int(os.getenv("SEC_CACHE_DAYS", "7"))
-FUNDAMENTALS_VERSION = "2.1.1"
+FUNDAMENTALS_VERSION = "2.3.1"
 SEC_DELAY = float(os.getenv("SEC_REQUEST_DELAY", "0.15"))
 
 # Freshness is based on the period covered by the financial data, not merely
@@ -417,8 +417,11 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             )
 
         dates = [d for d in (revenue_date, net_income_date, eps_date, cfo_date, capex_date) if d]
-        fundamental_date = min(dates) if dates else None
+        # Freshness should reflect the latest usable reporting period, not the
+        # oldest component. A missing/lagging XBRL tag (often capex or EPS)
+        # must not make an otherwise current TTM dataset look years old.
         latest_quarter_date = max(dates) if dates else None
+        fundamental_date = latest_quarter_date
 
         data_quality, freshness_flag, age = _freshness(fundamental_date)
 
@@ -473,6 +476,9 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         # E means the underlying financial period is too old to verify.
         if data_quality == "E":
             result["fundamentals_available"] = False
+            result["data_status"] = "STALE"
+        else:
+            result["data_status"] = "OK"
 
         _save_cache(symbol, result)
         return result
@@ -483,4 +489,5 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "fundamentals_source": "SEC_ERROR",
             "fundamentals_error": str(exc),
             "data_quality": "E",
+            "data_status": "ERROR",
         }

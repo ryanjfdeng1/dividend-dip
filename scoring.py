@@ -32,6 +32,7 @@ def score_stock(row: dict) -> tuple:
     pe = _num(row.get("pe"))
     fcf_yield = _num(row.get("fcf_yield"))
     data_quality = row.get("data_quality")
+    data_status = row.get("data_status")
     fundamental_age = _num(row.get("fundamental_age_days"))
     dd100 = _num(row.get("drawdown_100d"))
     dd60 = _num(row.get("drawdown_60d"))
@@ -214,7 +215,8 @@ def score_stock(row: dict) -> tuple:
     valuation = round(valuation * freshness_factor)
 
     fundamentals_verified = (
-        bool(row.get("fundamentals_available"))
+        data_status == "OK"
+        and bool(row.get("fundamentals_available"))
         and data_quality in ("A", "B", "C", "D")
         and freshness_factor > 0
     )
@@ -330,6 +332,11 @@ def score_stock(row: dict) -> tuple:
 
     total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
+    # Never expose a misleading total score when fundamentals are stale,
+    # unavailable, or errored. Component scores remain diagnostic only.
+    if not fundamentals_verified:
+        total = None
+
     if not fundamentals_verified:
         dip_type = "UNKNOWN"
     elif value_trap_risk == "HIGH":
@@ -357,7 +364,12 @@ def score_stock(row: dict) -> tuple:
         buy_stage = "DEEP_DIP_REVIEW"
 
     if not fundamentals_verified:
-        signal = "DATA INCOMPLETE"
+        if data_status == "STALE":
+            signal = "DATA STALE"
+        elif data_status == "ERROR":
+            signal = "DATA ERROR"
+        else:
+            signal = "DATA INCOMPLETE"
     elif value_trap_risk == "HIGH":
         signal = "VALUE TRAP REVIEW"
     elif value_trap_risk == "MEDIUM":
