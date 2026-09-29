@@ -220,7 +220,7 @@ def main():
         "candidate_rank", "candidate_score", "candidate_signal", "candidate_eligibility_reason",
         "ticker", "price",
         "research_rank", "research_score", "research_signal", "research_confidence",
-        "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
+        "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d", "drawdown_3y", "return_3y", "trend_regime",
         "rsi_14", "distance_200dma", "pe", "fcf_yield", "dividend_yield",
         "value_trap_risk", "dip_type", "buy_stage",
         "score", "signal", "quality_score", "trend_score", "valuation_score",
