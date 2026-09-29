@@ -185,23 +185,49 @@ def main():
         )
         df.loc[ranked.index, "candidate_rank"] = range(1, len(ranked) + 1)
 
+    # Explain why a stock is not a candidate instead of leaving Candidate Score blank.
+    def candidate_eligibility_reason(row):
+        if pd.notna(row.get("candidate_score")):
+            return "ELIGIBLE"
+        if row.get("data_status") != "OK" or row.get("score_status") != "SCORED":
+            return "FUNDAMENTALS_UNVERIFIED"
+        if pd.isna(row.get("research_score")):
+            return "RESEARCH_INCOMPLETE"
+        if row.get("research_score") < 65:
+            return "RESEARCH_TOO_LOW"
+        if pd.isna(row.get("research_confidence")) or row.get("research_confidence") < 75:
+            return "RESEARCH_CONFIDENCE_LOW"
+        if pd.isna(row.get("drawdown_100d")) or row.get("drawdown_100d") > -0.10:
+            return "DIP_TOO_SMALL"
+        if row.get("value_trap_risk") == "HIGH":
+            return "HIGH_VALUE_TRAP"
+        return "NOT_ELIGIBLE"
+
+    df["candidate_eligibility_reason"] = df.apply(candidate_eligibility_reason, axis=1)
+
+    # Human-first column order: decision fields first, then market state,
+    # research quality, legacy score components, risks, data quality, raw data.
     columns = [
-        "ticker", "price", "high_20d", "high_60d", "high_100d", "high_252d",
-        "drawdown_20d", "drawdown_60d", "drawdown_100d", "drawdown_252d",
-        "sma_200", "above_200dma", "distance_200dma", "rsi_14",
-        "eps", "free_cash_flow", "fcf_yield", "shares_outstanding", "roe", "payout_ratio", "pe",
-        "revenue", "net_income", "total_assets", "equity", "debt", "debt_to_equity",
-        "revenue_growth", "eps_growth", "dividend_yield", "dividend_growth", "fcf_payout_ratio", "dividend_safety",
-        "revenue_cagr_3y", "revenue_cagr_5y", "eps_cagr_3y", "eps_cagr_5y",
-        "fcf_cagr_3y", "fcf_cagr_5y", "operating_margin",
-        "margin_change_3y", "margin_change_5y", "debt_change_3y", "debt_change_5y",
-        "roic_proxy", "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date", "fundamentals_source", "data_quality", "data_status",
-        "fundamentals_error", "score_status", "quality_score", "trend_score", "valuation_score",
-        "dip_score", "dividend_score", "score", "dip_type",
-        "buy_stage", "structural_penalty", "value_trap_risk",
-        "structural_flags", "risk_flags", "research_flags",
-        "research_score", "research_signal", "research_confidence", "research_rank",
-        "candidate_score", "candidate_signal", "candidate_rank", "signal",
+        "candidate_rank", "candidate_score", "candidate_signal", "candidate_eligibility_reason",
+        "ticker", "price",
+        "research_rank", "research_score", "research_signal", "research_confidence",
+        "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
+        "rsi_14", "distance_200dma", "pe", "fcf_yield", "dividend_yield",
+        "value_trap_risk", "dip_type", "buy_stage",
+        "score", "signal", "quality_score", "trend_score", "valuation_score",
+        "dip_score", "dividend_score", "structural_penalty",
+        "dividend_safety", "fcf_payout_ratio", "roic_proxy", "debt_to_equity",
+        "revenue_cagr_5y", "eps_cagr_5y", "fcf_cagr_5y", "margin_change_5y",
+        "structural_flags", "research_flags", "risk_flags",
+        "data_status", "data_quality", "fundamentals_source",
+        "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date",
+        "fundamentals_error", "score_status",
+        "high_20d", "high_60d", "high_100d", "high_252d", "sma_200", "above_200dma",
+        "eps", "free_cash_flow", "shares_outstanding", "roe", "payout_ratio",
+        "revenue", "net_income", "total_assets", "equity", "debt",
+        "revenue_growth", "eps_growth", "dividend_growth",
+        "revenue_cagr_3y", "eps_cagr_3y", "fcf_cagr_3y", "operating_margin",
+        "margin_change_3y", "debt_change_3y", "debt_change_5y",
     ]
     columns = [c for c in columns if c in df.columns]
 
@@ -218,13 +244,46 @@ def main():
     print("-" * 200)
     print(df[columns].to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
-    df.to_csv("scan_results.csv", index=False)
+    # Keep scan_results.csv machine-friendly (raw numeric values) and also
+    # provide a human-readable version for opening directly in Excel/Numbers.
+    df[columns].to_csv("scan_results.csv", index=False)
+
+    readable = df[columns].copy()
+    percent_columns = {
+        "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
+        "distance_200dma", "fcf_yield", "dividend_yield", "fcf_payout_ratio",
+        "revenue_cagr_5y", "eps_cagr_5y", "fcf_cagr_5y", "margin_change_5y",
+        "revenue_growth", "eps_growth", "dividend_growth", "operating_margin",
+        "revenue_cagr_3y", "eps_cagr_3y", "fcf_cagr_3y",
+        "margin_change_3y", "debt_change_3y", "debt_change_5y",
+        "roe", "payout_ratio",
+    }
+    for column in percent_columns:
+        if column in readable.columns:
+            readable[column] = readable[column].map(
+                lambda x: "" if pd.isna(x) else f"{x * 100:.1f}%"
+            )
+
+    rank_columns = {"candidate_rank", "research_rank"}
+    for column in rank_columns:
+        if column in readable.columns:
+            readable[column] = readable[column].map(
+                lambda x: "" if pd.isna(x) else str(int(x))
+            )
+
+    for column in ("candidate_score", "research_score", "research_confidence", "score"):
+        if column in readable.columns:
+            readable[column] = readable[column].map(
+                lambda x: "" if pd.isna(x) else f"{x:.1f}"
+            )
+
+    readable.to_csv("scan_results_readable.csv", index=False)
 
     if errors:
         pd.DataFrame(errors).to_csv("scan_errors.csv", index=False)
         print(f"\n{len(errors)} symbols failed. See scan_errors.csv")
 
-    print("\nSaved: scan_results.csv")
+    print("\nSaved: scan_results.csv (raw) and scan_results_readable.csv (human-readable)")
 
 
 if __name__ == "__main__":
