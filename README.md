@@ -1,4 +1,4 @@
-# Quality Dip Scanner V2.1
+# Quality Dip Scanner V2.3
 
 A manual research scanner for finding high-quality US companies after meaningful price drawdowns.
 
@@ -12,7 +12,8 @@ Dividend yield is only a small optional bonus.
 
 | Component | Weight |
 |---|---:|
-| Quality | 45 |
+| Quality | 30 |
+| Long-term business trend | 15 |
 | Valuation | 30 |
 | Dip | 20 |
 | Dividend | 5 |
@@ -47,12 +48,14 @@ If SEC data is temporarily unavailable or insufficient and Tiingo Fundamentals a
 
 ### Data quality
 
-- **B / SEC_XBRL** — fundamental data successfully obtained from SEC.
-- **B / Tiingo** — SEC was insufficient, but Tiingo supplied usable fundamentals.
-- **D / SEC_ERROR** — fundamental data could not be obtained.
-- `DATA INCOMPLETE` means the program cannot verify the company's fundamentals; it does **not** mean the company has poor fundamentals.
+- **OK** — fundamentals are sufficiently current and verified; the stock can receive a numeric score.
+- **STALE** — fundamentals exist but the underlying reporting period is too old to verify; no numeric score is exposed.
+- **ERROR** — SEC/Tiingo retrieval failed; no numeric score is exposed.
+- **INCOMPLETE** — insufficient fundamental fields are available; no numeric score is exposed.
+- The scanner keeps component values for diagnostics, but only `OK` rows are ranked as scored candidates.
+- SEC freshness is based on the **latest usable reporting period**, not the oldest component. A lagging XBRL tag such as capex/EPS must not make an otherwise current TTM dataset appear years old.
 
-SEC fundamental caches are kept locally for 7 days by default. This prevents repeated scans from downloading the same Company Facts JSON every day.
+SEC fundamental caches are kept locally for 7 days by default. The cache schema/version is refreshed when the fundamental extraction logic changes. This prevents repeated scans from downloading the same Company Facts JSON every day.
 
 ## SEC User-Agent
 
