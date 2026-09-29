@@ -520,5 +520,6 @@ def score_stock(row: dict) -> tuple:
     return (
         total, signal, dip, dividend, quality, valuation,
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
-        ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags)
+        ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags),
+        research_score, research_signal, research_confidence
     )
