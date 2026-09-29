@@ -1,6 +1,6 @@
 import unittest
 
-from scanner import _normalize_data_status
+from scanner import _has_usable_fundamentals, _normalize_data_status
 
 
 class DataQualityStatusTests(unittest.TestCase):
@@ -12,6 +12,24 @@ class DataQualityStatusTests(unittest.TestCase):
             "fundamentals_source": "SEC_CACHE",
         }
         self.assertEqual(_normalize_data_status(row)["data_status"], "INCOMPLETE")
+
+    def test_nan_fundamentals_are_not_usable(self):
+        row = {
+            "fundamentals_available": True,
+            "eps": float("nan"),
+            "free_cash_flow": float("nan"),
+            "revenue": float("nan"),
+            "data_status": "OK",
+        }
+        self.assertFalse(_has_usable_fundamentals(row))
+
+    def test_zero_is_a_valid_fundamental(self):
+        row = {
+            "fundamentals_available": True,
+            "eps": 0.0,
+            "data_status": "OK",
+        }
+        self.assertTrue(_has_usable_fundamentals(row))
 
     def test_stale_data_is_stale(self):
         row = {
