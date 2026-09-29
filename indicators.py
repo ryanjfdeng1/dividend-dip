@@ -95,6 +95,7 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "total_assets": fundamentals.get("total_assets", np.nan),
         "equity": fundamentals.get("equity", np.nan),
         "debt": fundamentals.get("debt", np.nan),
+        "debt_to_equity": fundamentals.get("debt_to_equity", np.nan),
         "shares_outstanding": fundamentals.get("shares_outstanding", np.nan),
         "fundamental_date": fundamentals.get("fundamental_date"),
         "fundamental_age_days": fundamentals.get("fundamental_age_days", np.nan),
@@ -123,10 +124,35 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
     else:
         result["fcf_yield"] = np.nan
 
+    debt = result["debt"]
+    equity = result["equity"]
+    if pd.isna(result["debt_to_equity"]) and pd.notna(debt) and pd.notna(equity) and equity > 0:
+        result["debt_to_equity"] = float(debt / equity)
+
     eps = result["eps"]
     annual_dividend = result["annual_dividend"]
     if pd.isna(result["payout_ratio"]) and pd.notna(eps) and eps > 0 and pd.notna(annual_dividend):
         result["payout_ratio"] = float(annual_dividend / eps)
+
+    fcf = result["free_cash_flow"]
+    if pd.notna(fcf) and fcf > 0 and pd.notna(annual_dividend):
+        result["fcf_payout_ratio"] = float(annual_dividend / fcf)
+    else:
+        result["fcf_payout_ratio"] = np.nan
+
+    payout = result["payout_ratio"]
+    fcf_payout = result["fcf_payout_ratio"]
+    div_growth = result["dividend_growth"]
+    if pd.notna(payout) and payout <= 0.60 and pd.notna(fcf_payout) and fcf_payout <= 0.60:
+        result["dividend_safety"] = "STRONG"
+    elif pd.notna(payout) and payout <= 0.80 and (pd.isna(fcf_payout) or fcf_payout <= 0.80):
+        result["dividend_safety"] = "OK"
+    elif (pd.notna(payout) and payout > 1.00) or (pd.notna(fcf_payout) and fcf_payout > 1.00):
+        result["dividend_safety"] = "REVIEW"
+    elif pd.notna(div_growth) and div_growth < -0.05:
+        result["dividend_safety"] = "REVIEW"
+    else:
+        result["dividend_safety"] = "UNKNOWN"
 
     if pd.isna(result["pe"]) and pd.notna(eps) and eps > 0:
         result["pe"] = float(current / eps)
