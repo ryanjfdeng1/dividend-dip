@@ -453,6 +453,10 @@ def score_stock(row: dict) -> tuple:
 
     if research_score is None:
         research_signal = "RESEARCH INCOMPLETE"
+    elif research_confidence < 75:
+        # A high normalized score with substantial missing research inputs
+        # should not be presented as a strong research conclusion.
+        research_signal = "RESEARCH REVIEW" if research_score >= 65 else "RESEARCH RISK"
     elif research_score >= 80:
         research_signal = "RESEARCH STRONG"
     elif research_score >= 65:
