@@ -157,6 +157,17 @@ def main():
         na_position="last",
     )
 
+    # Research ranking is independent from the legacy score.
+    df["research_rank"] = pd.NA
+    research_mask = df["research_score"].notna()
+    if research_mask.any():
+        ranked = df.loc[research_mask].sort_values(
+            ["research_score", "research_confidence", "score"],
+            ascending=[False, False, False],
+            na_position="last",
+        )
+        df.loc[ranked.index, "research_rank"] = range(1, len(ranked) + 1)
+
     columns = [
         "ticker", "price", "high_20d", "high_60d", "high_100d", "high_252d",
         "drawdown_20d", "drawdown_60d", "drawdown_100d", "drawdown_252d",
@@ -172,7 +183,7 @@ def main():
         "dip_score", "dividend_score", "score", "dip_type",
         "buy_stage", "structural_penalty", "value_trap_risk",
         "structural_flags", "risk_flags", "research_flags",
-        "research_score", "research_signal", "research_confidence", "signal",
+        "research_score", "research_signal", "research_confidence", "research_rank", "signal",
     ]
     columns = [c for c in columns if c in df.columns]
 
