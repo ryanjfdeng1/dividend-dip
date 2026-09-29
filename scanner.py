@@ -113,8 +113,8 @@ def main():
                 
                 f"Q={row['quality_score']:2d}/30 | T={row['trend_score']:2d}/15 | V={row['valuation_score']:2d}/30 | "
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
-                f"Score={row['score']:3d} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
-                f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source} | "
+                f"Score={_fmt(row['score'], 0):>3s} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
+                f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source}/{row.get('data_status', 'INCOMPLETE')} | "
                 f"{sector} | {row['signal']}"
                 f"{fundamental_status}"
             )
