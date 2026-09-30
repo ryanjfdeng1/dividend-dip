@@ -536,6 +536,25 @@ def score_stock(row: dict) -> tuple:
         else "LIMITED"
     )
 
+    # Confidence is intentionally separate from Candidate Score. It tells us
+    # how much of the recent-fundamental picture is actually observed.
+    if (
+        fundamentals_verified
+        and fundamental_age is not None
+        and fundamental_age <= 120
+        and recent_fundamental_data_count >= 4
+    ):
+        fundamental_confidence = "HIGH"
+    elif (
+        fundamentals_verified
+        and fundamental_age is not None
+        and fundamental_age <= 120
+        and recent_fundamental_data_count >= 3
+    ):
+        fundamental_confidence = "MEDIUM"
+    else:
+        fundamental_confidence = "LOW"
+
     recent_fundamental_ok = (
         fundamentals_verified
         and fundamental_age is not None
@@ -679,5 +698,6 @@ def score_stock(row: dict) -> tuple:
         ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags),
         research_score, research_signal, research_confidence,
         recent_fundamental_score, recent_fundamental_data_quality,
-        structural_risk_multiplier, dip_quality, candidate_score, candidate_signal
+        structural_risk_multiplier, dip_quality, candidate_score, candidate_signal,
+        fundamental_confidence
     )
