@@ -2,6 +2,9 @@ import os
 from datetime import datetime
 
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.formatting.rule import CellIsRule, FormulaRule
 from dotenv import load_dotenv
 
 from config import STOCKS, FINANCIALS, SECTOR_MAP, INDUSTRY_MAP
@@ -278,7 +281,8 @@ def main():
         "revenue_growth", "eps_growth", "fcf_growth", "dividend_growth",
         "revenue_cagr_3y", "eps_cagr_3y", "fcf_cagr_3y", "operating_margin",
         "margin_change_3y", "debt_change_3y", "debt_change_5y",
-    ]    columns = [c for c in columns if c in df.columns]
+    ]
+    columns = [c for c in columns if c in df.columns]
 
     status_counts = df["data_status"].fillna("INCOMPLETE").value_counts().to_dict()
     scoreable = int(df["score"].notna().sum())
@@ -327,6 +331,82 @@ def main():
             )
 
     readable.to_csv("scan_results_readable.csv", index=False)
+
+    # Excel output: freeze the header/left panel, add filters, auto-size columns,
+    # and highlight the key decision fields so the first screen is easy to scan.
+    excel_path = "scan_results.xlsx"
+    readable.to_excel(excel_path, index=False, sheet_name="Scan Results")
+    wb = load_workbook(excel_path)
+    ws = wb["Scan Results"]
+    ws.freeze_panes = "E2"
+    ws.auto_filter.ref = ws.dimensions
+    ws.row_dimensions[1].height = 30
+
+    fills = {
+        "candidate": PatternFill("solid", fgColor="D9EAF7"),
+        "quality": PatternFill("solid", fgColor="E2F0D9"),
+        "risk": PatternFill("solid", fgColor="FCE4D6"),
+        "data": PatternFill("solid", fgColor="FFF2CC"),
+        "research": PatternFill("solid", fgColor="E4DFEC"),
+    }
+    header_map = {cell.value: cell.column for cell in ws[1]}
+    groups = {
+        "candidate": ["candidate_rank", "candidate_score", "candidate_signal", "candidate_eligibility_reason"],
+        "quality": ["dip_quality"],
+        "risk": ["value_trap_risk", "structural_risk_multiplier"],
+        "data": ["fundamental_confidence", "recent_fundamental_data_quality"],
+        "research": ["research_score", "research_signal", "research_confidence", "research_rank"],
+    }
+    for group, names in groups.items():
+        for name in names:
+            col = header_map.get(name)
+            if col:
+                ws.cell(1, col).fill = fills[group]
+                ws.cell(1, col).font = Font(bold=True)
+                for row in range(2, ws.max_row + 1):
+                    ws.cell(row, col).fill = fills[group]
+
+    # Highlight the most useful categorical states in the body.
+    if header_map.get("dip_quality"):
+        col = header_map["dip_quality"]
+        for row in range(2, ws.max_row + 1):
+            cell = ws.cell(row, col)
+            if cell.value in ("HEALTHY_DIP", "DEEP_HEALTHY_DIP"):
+                cell.fill = PatternFill("solid", fgColor="C6E0B4")
+            elif cell.value in ("STRUCTURAL_RISK_DIP", "LONG_TERM_DECLINE"):
+                cell.fill = PatternFill("solid", fgColor="F4B084")
+            elif cell.value in ("DATA_REVIEW", "FUNDAMENTAL_REVIEW"):
+                cell.fill = PatternFill("solid", fgColor="FFE699")
+
+    if header_map.get("fundamental_confidence"):
+        col = header_map["fundamental_confidence"]
+        for row in range(2, ws.max_row + 1):
+            cell = ws.cell(row, col)
+            if cell.value == "HIGH":
+                cell.fill = PatternFill("solid", fgColor="C6E0B4")
+            elif cell.value == "LOW":
+                cell.fill = PatternFill("solid", fgColor="F4B084")
+
+    for cell in ws[1]:
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(vertical="center")
+
+    # Practical widths: keep the important left panel readable without making
+    # the whole workbook excessively wide.
+    for column_cells in ws.columns:
+        letter = column_cells[0].column_letter
+        header = str(column_cells[0].value or "")
+        if header in groups["candidate"] + groups["quality"] + groups["risk"] + groups["data"] + groups["research"]:
+            width = min(max(len(header) + 2, 14), 28)
+        elif header in ("ticker", "price", "sector", "industry", "trend_regime"):
+            width = min(max(len(header) + 2, 12), 24)
+        else:
+            width = min(max(len(header) + 2, 10), 18)
+        ws.column_dimensions[letter].width = width
+
+    wb.save(excel_path)
 
     if errors:
         pd.DataFrame(errors).to_csv("scan_errors.csv", index=False)
