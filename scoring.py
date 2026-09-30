@@ -510,17 +510,12 @@ def score_stock(row: dict) -> tuple:
     ):
         points_value = _growth_points(value, points, strong, floor)
         if points_value is not None:
-            recent_components.append(points_value)
+            recent_components.append((points_value, points))
 
     if recent_components:
-        recent_fundamental_score = round(
-            sum(recent_components) / len(recent_components)
-            * 25.0 / sum(
-                8 if i == 0 else 8 if i == 1 else 5 if i == 2 else 4
-                for i in range(len(recent_components))
-            ),
-            1,
-        )
+        earned = sum(value for value, _ in recent_components)
+        possible = sum(points for _, points in recent_components)
+        recent_fundamental_score = round(earned / possible * 25.0, 1) if possible else None
 
     recent_fundamental_ok = (
         fundamentals_verified
