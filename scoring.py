@@ -12,7 +12,7 @@ def _num(value):
 
 
 def score_stock(row: dict) -> tuple:
-    """V2.3 Quality Dip score with explicit fundamental-data verification.
+    """V2.7 Quality Dip score with explicit fundamental-data verification.
 
     Base score: Quality 30 + Long-term business trend 15 + Valuation 30
     + Dip 20 + Dividend 5 = 100 points.
