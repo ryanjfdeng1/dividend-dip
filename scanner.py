@@ -73,7 +73,8 @@ def scan_one(symbol: str) -> dict:
         risk_flags, structural_flags, research_flags,
         research_score, research_signal, research_confidence,
         recent_fundamental_score, recent_fundamental_data_quality,
-        structural_risk_multiplier, dip_quality, candidate_score, candidate_signal
+        structural_risk_multiplier, dip_quality, candidate_score, candidate_signal,
+        fundamental_confidence
     ) = score_stock(data)
 
     data.update({
@@ -97,6 +98,7 @@ def scan_one(symbol: str) -> dict:
         "research_confidence": research_confidence,
         "recent_fundamental_score": recent_fundamental_score,
         "recent_fundamental_data_quality": recent_fundamental_data_quality,
+        "fundamental_confidence": fundamental_confidence,
         "structural_risk_multiplier": structural_risk_multiplier,
         "dip_quality": dip_quality,
         "candidate_score": candidate_score,
@@ -245,7 +247,7 @@ def main():
         "ticker", "price",
         "sector", "industry",
         "research_rank", "research_score", "research_signal", "research_confidence",
-        "recent_fundamental_score", "recent_fundamental_data_quality",
+        "recent_fundamental_score", "recent_fundamental_data_quality", "fundamental_confidence",
         "structural_risk_multiplier", "dip_quality",
         "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d", "drawdown_3y", "return_3y", "trend_regime",
         "rsi_14", "distance_200dma", "pe", "fcf_yield", "dividend_yield",
