@@ -27,6 +27,7 @@ def score_stock(row: dict) -> tuple:
     roe = _num(row.get("roe"))
     revenue_growth = _num(row.get("revenue_growth"))
     eps_growth = _num(row.get("eps_growth"))
+    fcf_growth = _num(row.get("fcf_growth"))
     payout = _num(row.get("payout_ratio"))
     pe = _num(row.get("pe"))
     fcf_yield = _num(row.get("fcf_yield"))
@@ -472,56 +473,104 @@ def score_stock(row: dict) -> tuple:
     else:
         research_signal = "RESEARCH RISK"
 
-    # V2.6 candidate layer: combine research quality with a meaningful price
-    # drawdown. This is intentionally independent from the legacy score.
-    # Candidate score is only populated when the stock has verified
-    # fundamentals, research quality >=65, >=75% research coverage, a
-    # meaningful 100-day dip, and no HIGH structural-risk classification.
+    # V2.7 candidate layer: target "recent drawdown + fundamentals intact".
+    # This is intentionally independent from the legacy score.
+    #
+    # Candidate eligibility requires:
+    #   * verified and recent fundamentals (<=120 days)
+    #   * meaningful 100-day drawdown
+    #   * healthy long-term price regime (no multi-year downtrend)
+    #   * no material recent revenue/EPS deterioration
+    #   * adequate research coverage and no HIGH value-trap classification
+    #
+    # Candidate score (100):
+    #   40 research quality + 25 recent fundamental stability
+    #   25 drawdown quality + 10 long-term price regime.
     candidate_score = None
     candidate_signal = "NOT_ELIGIBLE"
+    recent_fundamental_score = None
+
+    def _growth_points(value, max_points, strong, floor):
+        if value is None:
+            return None
+        if value >= strong:
+            return float(max_points)
+        if value >= 0:
+            return float(max_points) * (0.65 + 0.35 * (value / strong if strong > 0 else 0))
+        if value <= floor:
+            return 0.0
+        return float(max_points) * 0.65 * ((value - floor) / (0 - floor))
+
+    recent_components = []
+    for value, points, strong, floor in (
+        (revenue_growth, 8, 0.08, -0.05),
+        (eps_growth, 8, 0.10, -0.10),
+        (fcf_growth, 5, 0.10, -0.15),
+        (margin_change_3y, 4, 0.05, -0.10),
+    ):
+        points_value = _growth_points(value, points, strong, floor)
+        if points_value is not None:
+            recent_components.append(points_value)
+
+    if recent_components:
+        recent_fundamental_score = round(
+            sum(recent_components) / len(recent_components)
+            * 25.0 / sum(
+                8 if i == 0 else 8 if i == 1 else 5 if i == 2 else 4
+                for i in range(len(recent_components))
+            ),
+            1,
+        )
+
+    recent_fundamental_ok = (
+        fundamentals_verified
+        and fundamental_age is not None
+        and fundamental_age <= 120
+        and (revenue_growth is None or revenue_growth >= -0.05)
+        and (eps_growth is None or eps_growth >= -0.10)
+        and (fcf_growth is None or fcf_growth >= -0.15)
+    )
+    trend_ok = row.get("trend_regime") in ("HEALTHY_TREND", "NORMAL_CORRECTION")
+
     if (
         fundamentals_verified
+        and fundamental_age is not None
+        and fundamental_age <= 120
         and research_score is not None
         and research_score >= 65
         and research_confidence >= 75
         and dd100 is not None
         and dd100 <= -0.10
+        and trend_ok
+        and recent_fundamental_ok
         and value_trap_risk != "HIGH"
+        and recent_fundamental_score is not None
     ):
-        # 50 pts research quality.
-        quality_component = research_score * 0.50
+        # 40 pts research quality.
+        quality_component = research_score * 0.40
 
-        # 30 pts drawdown depth: 12 pts at -10%, scaling to 30 pts at -30%.
-        dip_component = min(30.0, 12.0 + max(0.0, (-dd100 - 0.10) / 0.20) * 18.0)
+        # 25 pts recent fundamental stability.
+        fundamental_component = recent_fundamental_score
 
-        # 10 pts data coverage.
-        confidence_component = min(10.0, research_confidence / 100.0 * 10.0)
+        # 25 pts drawdown: 10 pts at -10%, scaling to 25 pts at -30%.
+        dip_component = min(
+            25.0,
+            10.0 + max(0.0, (-dd100 - 0.10) / 0.20) * 15.0,
+        )
 
-        # 10 pts structural risk: LOW=10, MEDIUM=5.
-        risk_component = {
-            "LOW": 10.0,
-            "MEDIUM": 5.0,
-        }.get(value_trap_risk, 0.0)
-
-        trend_regime = row.get("trend_regime")
-        trend_risk_penalty = 0.0
-        if trend_regime == "MULTI_YEAR_DECLINE":
-            trend_risk_penalty = 15.0
-        elif trend_regime == "LONG_TERM_DOWNTREND":
-            trend_risk_penalty = 8.0
-        elif trend_regime == "NORMAL_CORRECTION":
-            trend_risk_penalty = 2.0
+        # 10 pts long-term price regime. A normal correction is still
+        # eligible, but receives less than a healthy long-term trend.
+        trend_component = 10.0 if row.get("trend_regime") == "HEALTHY_TREND" else 8.0
 
         candidate_score = round(
-            max(
-                0.0,
-                quality_component + dip_component + confidence_component
-                + risk_component - trend_risk_penalty,
-            ),
+            quality_component
+            + fundamental_component
+            + dip_component
+            + trend_component,
             1,
         )
 
-        if candidate_score >= 80:
+        if candidate_score >= 82:
             candidate_signal = "HIGH_QUALITY_DIP"
         elif candidate_score >= 70:
             candidate_signal = "QUALITY_DIP"
@@ -529,6 +578,7 @@ def score_stock(row: dict) -> tuple:
             candidate_signal = "WATCHLIST_DIP"
         else:
             candidate_signal = "WEAK_DIP"
+
 
     total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
@@ -590,5 +640,5 @@ def score_stock(row: dict) -> tuple:
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags),
         research_score, research_signal, research_confidence,
-        candidate_score, candidate_signal
+        recent_fundamental_score, candidate_score, candidate_signal
     )
