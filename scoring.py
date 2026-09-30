@@ -517,6 +517,25 @@ def score_stock(row: dict) -> tuple:
         possible = sum(points for _, points in recent_components)
         recent_fundamental_score = round(earned / possible * 25.0, 1) if possible else None
 
+    # Structural risk is not a hard exclusion unless HIGH, but MEDIUM risk
+    # should materially reduce Candidate Score. This prevents a large drawdown
+    # from overpowering leverage or other structural warnings.
+    structural_risk_multiplier = {
+        "LOW": 1.00,
+        "MEDIUM": 0.82,
+        "HIGH": 0.00,
+    }.get(value_trap_risk, 0.90)
+
+    recent_fundamental_data_count = sum(
+        value is not None
+        for value in (revenue_growth, eps_growth, fcf_growth, margin_change_3y)
+    )
+    recent_fundamental_data_quality = (
+        "COMPLETE" if recent_fundamental_data_count >= 4
+        else "PARTIAL" if recent_fundamental_data_count >= 3
+        else "LIMITED"
+    )
+
     recent_fundamental_ok = (
         fundamentals_verified
         and fundamental_age is not None
@@ -544,8 +563,14 @@ def score_stock(row: dict) -> tuple:
         # 40 pts research quality.
         quality_component = research_score * 0.40
 
-        # 25 pts recent fundamental stability.
+        # 25 pts recent fundamental stability. Missing inputs no longer
+        # silently become a perfect 25/25; the score is capped when coverage
+        # is incomplete.
         fundamental_component = recent_fundamental_score
+        if recent_fundamental_data_quality == "PARTIAL":
+            fundamental_component = min(fundamental_component, 21.0)
+        elif recent_fundamental_data_quality == "LIMITED":
+            fundamental_component = min(fundamental_component, 17.0)
 
         # 25 pts drawdown: 10 pts at -10%, scaling to 25 pts at -30%.
         dip_component = min(
@@ -557,13 +582,13 @@ def score_stock(row: dict) -> tuple:
         # eligible, but receives less than a healthy long-term trend.
         trend_component = 10.0 if row.get("trend_regime") == "HEALTHY_TREND" else 8.0
 
-        candidate_score = round(
+        raw_candidate_score = (
             quality_component
             + fundamental_component
             + dip_component
-            + trend_component,
-            1,
+            + trend_component
         )
+        candidate_score = round(raw_candidate_score * structural_risk_multiplier, 1)
 
         if candidate_score >= 82:
             candidate_signal = "HIGH_QUALITY_DIP"
@@ -574,6 +599,24 @@ def score_stock(row: dict) -> tuple:
         else:
             candidate_signal = "WEAK_DIP"
 
+
+    # Human-readable classification of the drawdown itself.
+    if row.get("data_status") != "OK":
+        dip_quality = "DATA_REVIEW"
+    elif value_trap_risk == "HIGH":
+        dip_quality = "STRUCTURAL_RISK_DIP"
+    elif row.get("trend_regime") in ("MULTI_YEAR_DECLINE", "LONG_TERM_DOWNTREND"):
+        dip_quality = "LONG_TERM_DECLINE"
+    elif value_trap_risk == "MEDIUM":
+        dip_quality = "STRUCTURAL_RISK_DIP"
+    elif recent_fundamental_data_quality == "LIMITED":
+        dip_quality = "DATA_REVIEW"
+    elif recent_fundamental_ok and row.get("trend_regime") == "HEALTHY_TREND":
+        dip_quality = "HEALTHY_DIP" if dd100 > -0.25 else "DEEP_HEALTHY_DIP"
+    elif recent_fundamental_ok and row.get("trend_regime") == "NORMAL_CORRECTION":
+        dip_quality = "HEALTHY_DIP" if dd100 > -0.25 else "DEEP_HEALTHY_DIP"
+    else:
+        dip_quality = "FUNDAMENTAL_REVIEW"
 
     total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
@@ -635,5 +678,6 @@ def score_stock(row: dict) -> tuple:
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         ",".join(risk_flags), ",".join(structural_flags), ",".join(research_flags),
         research_score, research_signal, research_confidence,
-        recent_fundamental_score, candidate_score, candidate_signal
+        recent_fundamental_score, recent_fundamental_data_quality,
+        structural_risk_multiplier, dip_quality, candidate_score, candidate_signal
     )
