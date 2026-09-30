@@ -240,34 +240,45 @@ def main():
         na_position="last",
     ).drop(columns=["_candidate_sort", "_candidate_rank_sort", "_research_rank_sort"])
 
-    # Human-first column order: decision fields first, then market state,
-    # research quality, legacy score components, risks, data quality, raw data.
+    # Human-first column order: put the five key decision dimensions together
+    # at the far left so the CSV can be understood immediately in Excel/Numbers:
+    # Candidate Score -> Dip Quality -> Structural Risk -> Fundamental Data Quality
+    # -> Research Score. Supporting market/research fields follow, then legacy
+    # score components and raw data.
     columns = [
-        "candidate_rank", "candidate_score", "candidate_signal", "candidate_eligibility_reason",
-        "ticker", "price",
-        "sector", "industry",
-        "research_rank", "research_score", "research_signal", "research_confidence",
-        "recent_fundamental_score", "recent_fundamental_data_quality", "fundamental_confidence",
-        "structural_risk_multiplier", "dip_quality",
-        "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d", "drawdown_3y", "return_3y", "trend_regime",
+        # ===== PRIMARY DECISION PANEL =====
+        "candidate_rank", "ticker", "price",
+        "candidate_score", "candidate_signal", "candidate_eligibility_reason",
+        "dip_quality",
+        "value_trap_risk", "structural_risk_multiplier",
+        "fundamental_confidence", "recent_fundamental_data_quality",
+        "research_score", "research_signal", "research_confidence", "research_rank",
+        # ===== SUPPORTING MARKET / DIP CONTEXT =====
+        "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
+        "drawdown_3y", "return_3y", "trend_regime",
         "rsi_14", "distance_200dma", "pe", "fcf_yield", "dividend_yield",
-        "value_trap_risk", "dip_type", "buy_stage",
-        "score", "signal", "quality_score", "trend_score", "valuation_score",
-        "dip_score", "dividend_score", "structural_penalty",
+        "sector", "industry",
+        # ===== FUNDAMENTAL / RISK DETAIL =====
+        "recent_fundamental_score", "dip_type", "buy_stage",
+        "structural_flags", "research_flags", "risk_flags",
         "dividend_safety", "fcf_payout_ratio", "roic_proxy", "debt_to_equity",
         "revenue_cagr_5y", "eps_cagr_5y", "fcf_cagr_5y", "margin_change_5y",
-        "structural_flags", "research_flags", "risk_flags",
+        # ===== LEGACY SCORE =====
+        "score", "signal", "quality_score", "trend_score", "valuation_score",
+        "dip_score", "dividend_score", "structural_penalty",
+        # ===== DATA STATUS =====
         "data_status", "data_quality", "fundamentals_source",
         "fundamental_date", "fundamental_age_days", "latest_quarter_date", "latest_filing_date",
         "fundamentals_error", "score_status",
+        # ===== RAW MARKET DATA =====
         "high_20d", "high_60d", "high_100d", "high_252d", "sma_200", "above_200dma",
+        # ===== RAW FUNDAMENTALS =====
         "eps", "free_cash_flow", "shares_outstanding", "roe", "payout_ratio",
         "revenue", "net_income", "total_assets", "equity", "debt",
         "revenue_growth", "eps_growth", "fcf_growth", "dividend_growth",
         "revenue_cagr_3y", "eps_cagr_3y", "fcf_cagr_3y", "operating_margin",
         "margin_change_3y", "debt_change_3y", "debt_change_5y",
-    ]
-    columns = [c for c in columns if c in df.columns]
+    ]    columns = [c for c in columns if c in df.columns]
 
     status_counts = df["data_status"].fillna("INCOMPLETE").value_counts().to_dict()
     scoreable = int(df["score"].notna().sum())
