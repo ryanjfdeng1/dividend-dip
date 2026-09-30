@@ -72,7 +72,8 @@ def scan_one(symbol: str) -> dict:
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         risk_flags, structural_flags, research_flags,
         research_score, research_signal, research_confidence,
-        recent_fundamental_score, candidate_score, candidate_signal
+        recent_fundamental_score, recent_fundamental_data_quality,
+        structural_risk_multiplier, dip_quality, candidate_score, candidate_signal
     ) = score_stock(data)
 
     data.update({
@@ -95,6 +96,9 @@ def scan_one(symbol: str) -> dict:
         "research_signal": research_signal,
         "research_confidence": research_confidence,
         "recent_fundamental_score": recent_fundamental_score,
+        "recent_fundamental_data_quality": recent_fundamental_data_quality,
+        "structural_risk_multiplier": structural_risk_multiplier,
+        "dip_quality": dip_quality,
         "candidate_score": candidate_score,
         "candidate_signal": candidate_signal,
         "dip_type": dip_type,
@@ -211,6 +215,12 @@ def main():
             return "RECENT_FCF_WEAK"
         if row.get("value_trap_risk") == "HIGH":
             return "HIGH_VALUE_TRAP"
+        if row.get("value_trap_risk") == "MEDIUM":
+            return "MEDIUM_STRUCTURAL_RISK"
+        if row.get("trend_regime") in ("LONG_TERM_DOWNTREND", "MULTI_YEAR_DECLINE"):
+            return "LONG_TERM_TREND_RISK"
+        if row.get("recent_fundamental_data_quality") == "LIMITED":
+            return "FUNDAMENTAL_DATA_LIMITED"
         return "NOT_ELIGIBLE"
 
     df["candidate_eligibility_reason"] = df.apply(candidate_eligibility_reason, axis=1)
@@ -234,7 +244,9 @@ def main():
         "candidate_rank", "candidate_score", "candidate_signal", "candidate_eligibility_reason",
         "ticker", "price",
         "sector", "industry",
-        "research_rank", "research_score", "research_signal", "research_confidence", "recent_fundamental_score",
+        "research_rank", "research_score", "research_signal", "research_confidence",
+        "recent_fundamental_score", "recent_fundamental_data_quality",
+        "structural_risk_multiplier", "dip_quality",
         "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d", "drawdown_3y", "return_3y", "trend_regime",
         "rsi_14", "distance_200dma", "pe", "fcf_yield", "dividend_yield",
         "value_trap_risk", "dip_type", "buy_stage",
