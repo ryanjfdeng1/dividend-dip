@@ -182,6 +182,29 @@ def _ttm_value(companyfacts, tags):
     return sum(float(row["val"]) for row in latest), latest[-1]["end"]
 
 
+def _ttm_fcf_growth(companyfacts, cfo_tags, capex_tags):
+    """TTM free-cash-flow growth versus the prior TTM window."""
+    cfo_rows = _quarterly_series(companyfacts, cfo_tags)
+    capex_rows = _quarterly_series(companyfacts, capex_tags)
+    if len(cfo_rows) < 8 or len(capex_rows) < 8:
+        return None
+
+    capex_by_end = {row["end"]: abs(float(row["val"])) for row in capex_rows}
+    fcf_rows = []
+    for row in cfo_rows:
+        if row["end"] in capex_by_end:
+            fcf_rows.append((row["end"], float(row["val"]) - capex_by_end[row["end"]]))
+
+    if len(fcf_rows) < 8:
+        return None
+
+    latest = sum(value for _, value in fcf_rows[-4:])
+    prior = sum(value for _, value in fcf_rows[-8:-4])
+    if prior == 0:
+        return None
+    return latest / prior - 1
+
+
 def _ttm_growth(companyfacts, tags):
     rows = _quarterly_series(companyfacts, tags)
     if len(rows) < 8:
@@ -337,6 +360,7 @@ def get_sec_fundamentals(symbol, force_refresh=False):
                 eps = net_income / shares_weighted
 
         fcf = cfo - abs(capex or 0) if cfo is not None else None
+        fcf_growth = _ttm_fcf_growth(facts, cfo_tags, capex_tags)
 
         revenue_annual = _annual_series(facts, revenue_tags)
         fcf_annual = []
@@ -447,6 +471,7 @@ def get_sec_fundamentals(symbol, force_refresh=False):
             "pe": None,
             "revenue_growth": revenue_growth,
             "eps_growth": eps_growth,
+            "fcf_growth": fcf_growth,
             "revenue": revenue,
             "net_income": net_income,
             "total_assets": float(assets["val"]) if assets else None,

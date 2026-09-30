@@ -108,6 +108,7 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "pe": fundamentals.get("pe", np.nan),
         "revenue_growth": fundamentals.get("revenue_growth", np.nan),
         "eps_growth": fundamentals.get("eps_growth", np.nan),
+        "fcf_growth": fundamentals.get("fcf_growth", np.nan),
         "revenue": fundamentals.get("revenue", np.nan),
         "net_income": fundamentals.get("net_income", np.nan),
         "total_assets": fundamentals.get("total_assets", np.nan),

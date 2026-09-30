@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 from dotenv import load_dotenv
 
-from config import STOCKS, FINANCIALS
+from config import STOCKS, FINANCIALS, SECTOR_MAP, INDUSTRY_MAP
 from data_provider import get_daily_history
 from fundamentals import get_fundamentals as get_tiingo_fundamentals
 from sec_fundamentals import get_sec_fundamentals
@@ -72,10 +72,12 @@ def scan_one(symbol: str) -> dict:
         trend_score, structural_penalty, value_trap_risk, dip_type, buy_stage,
         risk_flags, structural_flags, research_flags,
         research_score, research_signal, research_confidence,
-        candidate_score, candidate_signal
+        recent_fundamental_score, candidate_score, candidate_signal
     ) = score_stock(data)
 
     data.update({
+        "sector": SECTOR_MAP.get(symbol, "Unknown"),
+        "industry": INDUSTRY_MAP.get(symbol, "Unknown"),
         "data_status": data.get("data_status") or "INCOMPLETE",
         "score_status": "SCORED" if total is not None else "UNSCORED",
         "score": total,
@@ -92,6 +94,7 @@ def scan_one(symbol: str) -> dict:
         "research_score": research_score,
         "research_signal": research_signal,
         "research_confidence": research_confidence,
+        "recent_fundamental_score": recent_fundamental_score,
         "candidate_score": candidate_score,
         "candidate_signal": candidate_signal,
         "dip_type": dip_type,
@@ -117,7 +120,7 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
 
-    print(f"Quality Dip Scanner V2.4 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V2.7 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day")
     print("SEC fundamentals cache: refresh every 7 days | TTM + 3/5-year trend metrics")
@@ -130,7 +133,8 @@ def main():
             rows.append(row)
 
             fundamental_status = row.get("fundamentals_error", "")
-            sector = "FIN" if symbol in FINANCIALS else "NON-FIN"
+            sector = row.get("sector", "Unknown")
+            industry = row.get("industry", "Unknown")
             status = row.get("data_quality") or "D"
             source = row.get("fundamentals_source") or "NONE"
             if fundamental_status:
@@ -144,7 +148,7 @@ def main():
                 f"D={row['dip_score']:2d}/20 | Div={row['dividend_score']:1d}/5 | "
                 f"Score={_fmt(row['score'], 0):>3s} | Trap={row.get('value_trap_risk', 'UNKNOWN'):7s} | "
                 f"Penalty={row.get('structural_penalty', 0):2d} | {status}/{source}/{row.get('data_status', 'INCOMPLETE')} | "
-                f"{sector} | {row['signal']}"
+                f"{sector} / {industry} | {row['signal']}"
                 f"{fundamental_status}"
             )
         except Exception as exc:
@@ -195,6 +199,16 @@ def main():
             return "RESEARCH_CONFIDENCE_LOW"
         if pd.isna(row.get("drawdown_100d")) or row.get("drawdown_100d") > -0.10:
             return "DIP_TOO_SMALL"
+        if row.get("fundamental_age_days") is not None and row.get("fundamental_age_days") > 120:
+            return "FUNDAMENTALS_TOO_OLD"
+        if row.get("trend_regime") not in ("HEALTHY_TREND", "NORMAL_CORRECTION"):
+            return "LONG_TERM_TREND_RISK"
+        if row.get("revenue_growth") is not None and row.get("revenue_growth") < -0.05:
+            return "RECENT_REVENUE_WEAK"
+        if row.get("eps_growth") is not None and row.get("eps_growth") < -0.10:
+            return "RECENT_EPS_WEAK"
+        if row.get("fcf_growth") is not None and row.get("fcf_growth") < -0.15:
+            return "RECENT_FCF_WEAK"
         if row.get("value_trap_risk") == "HIGH":
             return "HIGH_VALUE_TRAP"
         return "NOT_ELIGIBLE"
@@ -219,7 +233,8 @@ def main():
     columns = [
         "candidate_rank", "candidate_score", "candidate_signal", "candidate_eligibility_reason",
         "ticker", "price",
-        "research_rank", "research_score", "research_signal", "research_confidence",
+        "sector", "industry",
+        "research_rank", "research_score", "research_signal", "research_confidence", "recent_fundamental_score",
         "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d", "drawdown_3y", "return_3y", "trend_regime",
         "rsi_14", "distance_200dma", "pe", "fcf_yield", "dividend_yield",
         "value_trap_risk", "dip_type", "buy_stage",
@@ -234,7 +249,7 @@ def main():
         "high_20d", "high_60d", "high_100d", "high_252d", "sma_200", "above_200dma",
         "eps", "free_cash_flow", "shares_outstanding", "roe", "payout_ratio",
         "revenue", "net_income", "total_assets", "equity", "debt",
-        "revenue_growth", "eps_growth", "dividend_growth",
+        "revenue_growth", "eps_growth", "fcf_growth", "dividend_growth",
         "revenue_cagr_3y", "eps_cagr_3y", "fcf_cagr_3y", "operating_margin",
         "margin_change_3y", "debt_change_3y", "debt_change_5y",
     ]
@@ -262,7 +277,7 @@ def main():
         "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
         "distance_200dma", "fcf_yield", "dividend_yield", "fcf_payout_ratio",
         "revenue_cagr_5y", "eps_cagr_5y", "fcf_cagr_5y", "margin_change_5y",
-        "revenue_growth", "eps_growth", "dividend_growth", "operating_margin",
+        "revenue_growth", "eps_growth", "fcf_growth", "dividend_growth", "operating_margin",
         "revenue_cagr_3y", "eps_cagr_3y", "fcf_cagr_3y",
         "margin_change_3y", "debt_change_3y", "debt_change_5y",
         "roe", "payout_ratio",
