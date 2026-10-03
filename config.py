@@ -125,3 +125,16 @@ INDUSTRY_MAP = {
     "SYY": "Consumer Staples Distribution & Retail", "FDX": "Air Freight & Logistics",
     "ORLY": "Specialty Retail", "AZO": "Specialty Retail",
 }
+
+
+# Company groups prevent multiple share classes occupying multiple primary slots.
+COMPANY_GROUP_MAP = {"GOOG": "Alphabet", "GOOGL": "Alphabet"}
+
+# Optional local portfolio metadata; tickers are supplied through .env, not stored here.
+PORTFOLIO_TICKER_SECTOR_MAP = {
+    "NVDA": "Information Technology", "TSM": "Information Technology",
+    "SMH": "Information Technology", "QQQ": "Information Technology",
+    "VYM": "Financials", "SCHD": "Financials", "JEPQ": "Information Technology",
+    "XLI": "Industrials", "XLV": "Health Care", "EWT": "Information Technology",
+    "EWY": "Information Technology",
+}
