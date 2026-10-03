@@ -7,7 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.formatting.rule import CellIsRule, FormulaRule
 from dotenv import load_dotenv
 
-from config import STOCKS, FINANCIALS, SECTOR_MAP, INDUSTRY_MAP
+from config import STOCKS, FINANCIALS, SECTOR_MAP, INDUSTRY_MAP, COMPANY_GROUP_MAP, PORTFOLIO_TICKER_SECTOR_MAP
 from data_provider import get_daily_history
 from fundamentals import get_fundamentals as get_tiingo_fundamentals
 from sec_fundamentals import get_sec_fundamentals
@@ -62,6 +62,38 @@ def get_fundamentals(symbol: str) -> dict:
     return _normalize_data_status(sec)
 
 
+def _company_group(symbol: str) -> str:
+    return COMPANY_GROUP_MAP.get(symbol, symbol)
+
+
+def _portfolio_tickers() -> set[str]:
+    raw = os.getenv("DIVIDEND_DIP_PORTFOLIO_TICKERS", "")
+    return {item.strip().upper() for item in raw.split(",") if item.strip()}
+
+
+def _portfolio_overlap(symbol: str) -> tuple[str, int]:
+    tickers = _portfolio_tickers()
+    if not tickers:
+        return "UNKNOWN", 0
+    target_sector = SECTOR_MAP.get(symbol)
+    target_industry = INDUSTRY_MAP.get(symbol)
+    count = 0
+    best = "LOW"
+    for held in tickers:
+        if held == symbol:
+            return "HIGH", count + 1
+        held_sector = SECTOR_MAP.get(held) or PORTFOLIO_TICKER_SECTOR_MAP.get(held)
+        held_industry = INDUSTRY_MAP.get(held)
+        if target_industry and held_industry and target_industry == held_industry:
+            count += 1
+            best = "HIGH"
+        elif target_sector and held_sector and target_sector == held_sector:
+            count += 1
+            if best != "HIGH":
+                best = "MEDIUM"
+    return best, count
+
+
 def scan_one(symbol: str) -> dict:
     history = get_daily_history(symbol, use_cache=True)
     fundamentals = get_fundamentals(symbol)
@@ -83,6 +115,9 @@ def scan_one(symbol: str) -> dict:
     data.update({
         "sector": SECTOR_MAP.get(symbol, "Unknown"),
         "industry": INDUSTRY_MAP.get(symbol, "Unknown"),
+        "company_group": _company_group(symbol),
+        "portfolio_overlap": _portfolio_overlap(symbol)[0],
+        "portfolio_overlap_count": _portfolio_overlap(symbol)[1],
         "data_status": data.get("data_status") or "INCOMPLETE",
         "score_status": "SCORED" if total is not None else "UNSCORED",
         "score": total,
@@ -186,6 +221,7 @@ def main():
     # a meaningful 100-day drawdown. Stocks without a qualifying dip are not
     # ranked as candidates.
     df["candidate_rank"] = pd.NA
+    df["candidate_group_rank"] = pd.NA
     candidate_mask = df["candidate_score"].notna()
     if candidate_mask.any():
         ranked = df.loc[candidate_mask].sort_values(
@@ -193,10 +229,22 @@ def main():
             ascending=[False, False, True],
             na_position="last",
         )
-        df.loc[ranked.index, "candidate_rank"] = range(1, len(ranked) + 1)
+        seen_groups = set()
+        primary_rank = 1
+        group_counts = {}
+        for idx, row in ranked.iterrows():
+            group = row.get("company_group", row.get("ticker"))
+            group_counts[group] = group_counts.get(group, 0) + 1
+            df.loc[idx, "candidate_group_rank"] = group_counts[group]
+            if group not in seen_groups:
+                df.loc[idx, "candidate_rank"] = primary_rank
+                seen_groups.add(group)
+                primary_rank += 1
 
     # Explain why a stock is not a candidate instead of leaving Candidate Score blank.
     def candidate_eligibility_reason(row):
+        if pd.notna(row.get("candidate_score")) and pd.notna(row.get("candidate_group_rank")) and row.get("candidate_group_rank") > 1:
+            return "SAME_COMPANY_DUPLICATE"
         if pd.notna(row.get("candidate_score")):
             return "ELIGIBLE"
         if row.get("data_status") != "OK" or row.get("score_status") != "SCORED":
@@ -236,13 +284,14 @@ def main():
     # Research Rank / Research Score. This makes the CSV useful at first glance.
     df["_candidate_sort"] = df["candidate_rank"].notna().map({True: 0, False: 1})
     df["_candidate_rank_sort"] = df["candidate_rank"].fillna(float("inf"))
+    df["_candidate_group_sort"] = df["candidate_group_rank"].fillna(float("inf"))
     df["_research_rank_sort"] = df["research_rank"].fillna(float("inf"))
     df = df.sort_values(
-        ["_candidate_sort", "_candidate_rank_sort", "_research_rank_sort",
+        ["_candidate_sort", "_candidate_rank_sort", "_candidate_group_sort", "_research_rank_sort",
          "research_score", "score", "ticker"],
         ascending=[True, True, True, False, False, True],
         na_position="last",
-    ).drop(columns=["_candidate_sort", "_candidate_rank_sort", "_research_rank_sort"])
+    ).drop(columns=["_candidate_sort", "_candidate_rank_sort", "_candidate_group_sort", "_research_rank_sort"])
 
     # Human-first column order: put the five key decision dimensions together
     # at the far left so the CSV can be understood immediately in Excel/Numbers:
@@ -251,8 +300,9 @@ def main():
     # score components and raw data.
     columns = [
         # ===== PRIMARY DECISION PANEL =====
-        "candidate_rank", "ticker", "price",
+        "candidate_rank", "ticker", "company_group", "price",
         "candidate_score", "candidate_signal", "candidate_eligibility_reason",
+        "portfolio_overlap", "portfolio_overlap_count", "candidate_group_rank",
         "dip_quality",
         "value_trap_risk", "structural_risk_multiplier",
         "fundamental_confidence", "recent_fundamental_data_quality",
