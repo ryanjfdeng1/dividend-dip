@@ -12,7 +12,7 @@ CACHE_DIR = Path("data")
 CACHE_DIR.mkdir(exist_ok=True)
 
 SEC_CACHE_DAYS = int(os.getenv("SEC_CACHE_DAYS", "7"))
-FUNDAMENTALS_VERSION = "2.4.1"
+FUNDAMENTALS_VERSION = "2.4.2"
 SEC_DELAY = float(os.getenv("SEC_REQUEST_DELAY", "0.15"))
 
 # Freshness is based on the period covered by the financial data, not merely
@@ -309,6 +309,29 @@ def get_sec_fundamentals(symbol, force_refresh=False):
         capex, capex_date = _ttm_value(facts, capex_tags)
         eps, eps_date = _ttm_value(facts, eps_tags)
         operating_income_ttm, operating_income_ttm_date = _ttm_value(facts, operating_income_tags)
+
+        # If the latest 10-K covers a newer fiscal year than the latest
+        # standalone quarter, use the reported annual value as the current
+        # TTM. Otherwise _quarterly_series() can combine three current
+        # quarters with the prior year's Q4, distorting EPS, FCF and ROIC.
+        def _prefer_latest_annual(value, value_date, tags):
+            annual_rows = _annual_series(facts, tags)
+            if not annual_rows:
+                return value, value_date
+            annual = annual_rows[-1]
+            annual_date = annual.get("end")
+            if annual_date and (not value_date or annual_date >= value_date):
+                return float(annual["val"]), annual_date
+            return value, value_date
+
+        revenue, revenue_date = _prefer_latest_annual(revenue, revenue_date, revenue_tags)
+        net_income, net_income_date = _prefer_latest_annual(net_income, net_income_date, net_income_tags)
+        cfo, cfo_date = _prefer_latest_annual(cfo, cfo_date, cfo_tags)
+        capex, capex_date = _prefer_latest_annual(capex, capex_date, capex_tags)
+        eps, eps_date = _prefer_latest_annual(eps, eps_date, eps_tags)
+        operating_income_ttm, operating_income_ttm_date = _prefer_latest_annual(
+            operating_income_ttm, operating_income_ttm_date, operating_income_tags
+        )
 
         # Fallback to annual data when a company does not expose enough
         # standalone quarterly XBRL observations.
