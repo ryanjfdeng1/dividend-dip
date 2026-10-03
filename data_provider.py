@@ -90,6 +90,37 @@ def _request_tiingo(symbol: str):
         raise RuntimeError(f"Tiingo request failed for {symbol}: {exc}") from exc
 
 
+def _apply_split_adjustment(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize historical OHLC prices to the latest share basis.
+
+    Tiingo provides splitFactor on the ex-date. A forward split such as
+    KLAC's 10-for-1 split has splitFactor=10, so prices before that date
+    must be divided by 10 for a continuous price series.
+    """
+    df = df.copy()
+    if "SplitFactor" not in df.columns:
+        df["SplitFactor"] = 1.0
+
+    factors = pd.to_numeric(df["SplitFactor"], errors="coerce").fillna(1.0)
+    factors = factors.where(factors > 0, 1.0)
+
+    # Product of all split factors strictly after each observation.
+    # This keeps the ex-date itself on the new share basis.
+    future_factor = factors.iloc[::-1].cumprod().iloc[::-1] / factors
+    future_factor = future_factor.replace([float("inf"), -float("inf")], 1.0)
+
+    df["CloseRaw"] = pd.to_numeric(df["Close"], errors="coerce")
+    df["SplitAdjustmentFactor"] = future_factor
+
+    for column in ("Open", "High", "Low", "Close"):
+        if column in df.columns:
+            values = pd.to_numeric(df[column], errors="coerce")
+            df[column] = values / future_factor
+
+    df["SplitAdjusted"] = future_factor.ne(1.0)
+    return df
+
+
 def _get_tiingo_history(symbol: str) -> pd.DataFrame:
     cached = _read_cache(symbol)
 
@@ -99,8 +130,9 @@ def _get_tiingo_history(symbol: str) -> pd.DataFrame:
         not cached.empty
         and cached.index.max() >= today - pd.Timedelta(days=4)
         and len(cached) >= 700
+        and "SplitFactor" in cached.columns
     ):
-        return cached
+        return _apply_split_adjustment(cached)
 
     payload = _request_tiingo(symbol)
     if not isinstance(payload, list) or not payload:
@@ -117,11 +149,13 @@ def _get_tiingo_history(symbol: str) -> pd.DataFrame:
             "Volume": int(item["volume"]),
             "AdjClose": float(item.get("adjClose", item["close"])),
             "Dividend": float(item.get("divCash", 0) or 0),
+            "SplitFactor": float(item.get("splitFactor", 1.0) or 1.0),
         })
 
     df = pd.DataFrame(rows)
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.set_index("Date").sort_index()
+    df = _apply_split_adjustment(df)
     df.to_csv(_cache_path(symbol))
     return df
 
@@ -129,7 +163,12 @@ def _get_tiingo_history(symbol: str) -> pd.DataFrame:
 def _get_alpha_history(symbol: str) -> pd.DataFrame:
     cached = _read_cache(symbol)
     if not cached.empty:
-        return cached
+        if "SplitFactor" in cached.columns:
+            return _apply_split_adjustment(cached)
+        raise RuntimeError(
+            f"Cached Alpha Vantage history for {symbol} has no split metadata. "
+            "Use Tiingo price data for split-safe historical calculations."
+        )
 
     params = {
         "function": "TIME_SERIES_DAILY",
@@ -164,13 +203,18 @@ def _get_alpha_history(symbol: str) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.set_index("Date").sort_index()
-    df.to_csv(_cache_path(symbol))
-    time.sleep(1.2)
-    return df
+    raise RuntimeError(
+        f"Alpha Vantage daily data for {symbol} lacks split metadata. "
+        "Use Tiingo price data for split-safe historical calculations."
+    )
 
 
 def get_daily_history(symbol: str, use_cache: bool = True) -> pd.DataFrame:
-    """Prefer Tiingo and persist a local request budget/cache."""
+    """Return a split-normalized price series; Tiingo is required."""
     if os.getenv("TIINGO_API_KEY"):
         return _get_tiingo_history(symbol)
-    return _get_alpha_history(symbol)
+
+    raise RuntimeError(
+        "Split-safe price history requires TIINGO_API_KEY. "
+        "Alpha Vantage TIME_SERIES_DAILY does not provide split metadata."
+    )
