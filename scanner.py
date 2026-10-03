@@ -120,18 +120,19 @@ def _fmt(value, digits=1):
 
 
 def main():
-    if not os.getenv("TIINGO_API_KEY") and not os.getenv("ALPHAVANTAGE_API_KEY"):
+    if not os.getenv("TIINGO_API_KEY"):
         raise RuntimeError(
-            "Missing price-data API key. Set TIINGO_API_KEY or "
-            "ALPHAVANTAGE_API_KEY in .env."
+            "TIINGO_API_KEY is required for split-safe historical prices. "
+            "Add TIINGO_API_KEY to .env. Alpha Vantage TIME_SERIES_DAILY "
+            "does not provide split metadata."
         )
 
     rows, errors = [], []
-    price_provider = "Tiingo" if os.getenv("TIINGO_API_KEY") else "Alpha Vantage"
+    price_provider = "Tiingo (split-normalized)"
 
     print(f"Quality Dip Scanner V2.7 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
-    print("Price cache: refresh at most once per trading day")
+    print("Price cache: refresh at most once per trading day | Corporate actions: split-normalized")
     print("SEC fundamentals cache: refresh every 7 days | TTM + 3/5-year trend metrics")
     print("Data quality: OK scored | STALE/ERROR/INCOMPLETE excluded from ranking")
     print("=" * 155)
@@ -275,6 +276,7 @@ def main():
         "fundamentals_error", "score_status",
         # ===== RAW MARKET DATA =====
         "high_20d", "high_60d", "high_100d", "high_252d", "sma_200", "above_200dma",
+        "split_adjusted", "split_adjustment_factor",
         # ===== RAW FUNDAMENTALS =====
         "eps", "free_cash_flow", "shares_outstanding", "roe", "payout_ratio",
         "revenue", "net_income", "total_assets", "equity", "debt",
