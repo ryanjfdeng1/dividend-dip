@@ -91,7 +91,7 @@ def calculate_metrics(history: pd.DataFrame, fundamentals: Optional[dict] = None
         "above_200dma": bool(current > sma_200) if pd.notna(sma_200) else None,
         "distance_200dma": (current / sma_200 - 1) if pd.notna(sma_200) and sma_200 > 0 else np.nan,
         "split_adjusted": bool(history.get("SplitAdjusted", pd.Series(False, index=history.index)).any()),
-        "split_adjustment_factor": float(history.get("SplitAdjustmentFactor", pd.Series(1.0, index=history.index)).iloc[-1]),
+        "split_adjustment_factor": float(history.get("SplitAdjustmentFactor", pd.Series(1.0, index=history.index)).iloc[0]),
         "rsi_14": calculate_rsi(close),
         **calculate_dividend_metrics(history, current),
     }
