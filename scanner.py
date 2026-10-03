@@ -283,15 +283,32 @@ def main():
     # eligible candidates first by Candidate Rank, then non-candidates by
     # Research Rank / Research Score. This makes the CSV useful at first glance.
     df["_candidate_sort"] = df["candidate_rank"].notna().map({True: 0, False: 1})
-    df["_candidate_rank_sort"] = df["candidate_rank"].fillna(float("inf"))
-    df["_candidate_group_sort"] = df["candidate_group_rank"].fillna(float("inf"))
-    df["_research_rank_sort"] = df["research_rank"].fillna(float("inf"))
+    # Explicitly convert nullable/object rank columns to numeric before
+    # filling the sort sentinel. This avoids pandas' deprecated silent
+    # downcasting behavior for object-dtype fillna().
+    df["_candidate_rank_sort"] = pd.to_numeric(
+        df["candidate_rank"], errors="coerce"
+    ).fillna(float("inf"))
+    df["_candidate_group_sort"] = pd.to_numeric(
+        df["candidate_group_rank"], errors="coerce"
+    ).fillna(float("inf"))
+    df["_research_rank_sort"] = pd.to_numeric(
+        df["research_rank"], errors="coerce"
+    ).fillna(float("inf"))
+
     df = df.sort_values(
-        ["_candidate_sort", "_candidate_rank_sort", "_candidate_group_sort", "_research_rank_sort",
-         "research_score", "score", "ticker"],
-        ascending=[True, True, True, False, False, True],
+        ["_candidate_sort", "_candidate_rank_sort", "_candidate_group_sort",
+         "_research_rank_sort", "research_score", "score", "ticker"],
+        ascending=[True, True, True, True, False, False, True],
         na_position="last",
-    ).drop(columns=["_candidate_sort", "_candidate_rank_sort", "_candidate_group_sort", "_research_rank_sort"])
+    ).drop(
+        columns=[
+            "_candidate_sort",
+            "_candidate_rank_sort",
+            "_candidate_group_sort",
+            "_research_rank_sort",
+        ]
+    )
 
     # Human-first column order: put the five key decision dimensions together
     # at the far left so the CSV can be understood immediately in Excel/Numbers:
