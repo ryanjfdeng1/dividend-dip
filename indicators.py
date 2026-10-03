@@ -25,6 +25,15 @@ def calculate_dividend_metrics(history: pd.DataFrame, current: float) -> dict:
         return {"dividend_yield": np.nan, "dividend_growth": np.nan, "annual_dividend": np.nan}
 
     dividends = pd.to_numeric(dividends, errors="coerce").fillna(0)
+
+    # Normalize dividend cash amounts to the latest share basis, matching
+    # the split-normalized price series. Otherwise pre-split dividends are
+    # mixed with post-split shares and payout ratios are overstated.
+    split_factor = history.get("SplitAdjustmentFactor")
+    if split_factor is not None:
+        split_factor = pd.to_numeric(split_factor, errors="coerce").replace(0, np.nan).fillna(1.0)
+        dividends = dividends / split_factor
+
     dates = dividends.index
     end = dates[-1]
     last_year = dividends[(dates > end - pd.Timedelta(days=365)) & (dates <= end)].sum()
