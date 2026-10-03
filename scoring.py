@@ -586,10 +586,13 @@ def score_stock(row: dict) -> tuple:
         # silently become a perfect 25/25; the score is capped when coverage
         # is incomplete.
         fundamental_component = recent_fundamental_score
+        # Do not let normalized scores hide missing recent metrics.
         if recent_fundamental_data_quality == "PARTIAL":
-            fundamental_component = min(fundamental_component, 21.0)
+            fundamental_component = min(fundamental_component, 22.0)
         elif recent_fundamental_data_quality == "LIMITED":
-            fundamental_component = min(fundamental_component, 17.0)
+            fundamental_component = min(fundamental_component, 16.0)
+        elif recent_fundamental_data_quality == "COMPLETE":
+            fundamental_component = min(fundamental_component, 25.0)
 
         # 25 pts drawdown: 10 pts at -10%, scaling to 25 pts at -30%.
         dip_component = min(
