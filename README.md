@@ -110,7 +110,7 @@ These are research labels, not automatic trading instructions.
 
 ## Three-scenario fair value model (V2.8)
 
-The scanner now adds a valuation range designed to distinguish a genuine discount from a stock that is merely falling from an elevated valuation.
+The scanner now adds a valuation range designed to distinguish a genuine discount from a stock that is merely falling from an elevated valuation. V2.8 also feeds the base fair-value discount into Candidate Score.
 
 For stocks with positive EPS and usable growth history, it calculates:
 - `fair_value_bear` — 3-year EPS growth reduced by 8 percentage points, using the lower terminal PE.
@@ -122,7 +122,9 @@ For stocks with positive EPS and usable growth history, it calculates:
 
 The model uses the average of available 3-year EPS CAGR, 5-year EPS CAGR and current EPS growth, capped between -5% and +25% for the normalized growth assumption. It projects three years forward and discounts the resulting value back at 10%.
 
-Industry PE bands are used rather than today's PE alone. Semiconductor Equipment, for example, uses 25x / 30x / 35x for bear/base/bull. The result is a screening estimate, not a broker target price or a guarantee of intrinsic value. Missing or non-positive EPS/growth data leaves the fair-value fields blank.
+Industry PE bands are used rather than today's PE alone. Semiconductor Equipment, for example, uses 25x / 30x / 35x for bear/base/bull. The result is a screening estimate, not a broker target price or a guarantee of intrinsic value.
+
+Candidate Score V2.8 is now weighted: 35% research quality + 20% recent fundamental stability + 15% drawdown + 10% long-term price regime + 20% valuation opportunity. The valuation component gives 20/20 when the current price is at least 20% below base fair value, scales linearly to 0 at base fair value, and gives no positive valuation points above base fair value. Structural-risk multipliers are applied afterward. Missing or non-positive EPS/growth data leaves the fair-value fields blank.
 
 ## Structural-risk / value-trap detection
 
