@@ -681,8 +681,8 @@ def score_stock(row: dict) -> tuple:
                 valuation_opportunity_component = 20.0
             elif discount_to_fair >= 0.0:
                 valuation_opportunity_component = 20.0 * (discount_to_fair / 0.20)
-            elif discount_to_fair >= -0.20:
-                valuation_opportunity_component = 20.0 * ((discount_to_fair + 0.20) / 0.20)
+            # No valuation credit when price is above base fair value.
+            # This keeps the 20-point component focused on actual discount.
 
         raw_candidate_score = (
             quality_component
