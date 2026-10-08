@@ -99,6 +99,7 @@ def scan_one(symbol: str) -> dict:
     fundamentals = get_fundamentals(symbol)
     data = calculate_metrics(history, fundamentals)
     data["ticker"] = symbol
+    data["industry"] = INDUSTRY_MAP.get(symbol, "Unknown")
     data["date"] = datetime.now().date().isoformat()
     data = _normalize_data_status(data)
 
@@ -109,7 +110,9 @@ def scan_one(symbol: str) -> dict:
         research_score, research_signal, research_confidence,
         recent_fundamental_score, recent_fundamental_data_quality,
         structural_risk_multiplier, dip_quality, candidate_score, candidate_signal,
-        fundamental_confidence
+        fundamental_confidence,
+        fair_value_bear, fair_value_base, fair_value_bull,
+        margin_of_safety_price, fair_value_upside, fair_value_scenario
     ) = score_stock(data)
 
     data.update({
@@ -144,6 +147,12 @@ def scan_one(symbol: str) -> dict:
         "dip_type": dip_type,
         "buy_stage": buy_stage,
         "risk_flags": risk_flags,
+        "fair_value_bear": fair_value_bear,
+        "fair_value_base": fair_value_base,
+        "fair_value_bull": fair_value_bull,
+        "margin_of_safety_price": margin_of_safety_price,
+        "fair_value_upside": fair_value_upside,
+        "fair_value_scenario": fair_value_scenario,
     })
     return data
 
