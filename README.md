@@ -108,6 +108,22 @@ Alpha Vantage also provides standardized fundamental endpoints for company overv
 
 These are research labels, not automatic trading instructions.
 
+## Three-scenario fair value model (V2.8)
+
+The scanner now adds a valuation range designed to distinguish a genuine discount from a stock that is merely falling from an elevated valuation.
+
+For stocks with positive EPS and usable growth history, it calculates:
+- `fair_value_bear` — 3-year EPS growth reduced by 8 percentage points, using the lower terminal PE.
+- `fair_value_base` — normalized 3-year EPS growth, using the industry base PE.
+- `fair_value_bull` — 3-year EPS growth increased by 8 percentage points, using the higher terminal PE.
+- `margin_of_safety_price` — 80% of base fair value.
+- `fair_value_upside` — base fair value versus current price.
+- `fair_value_scenario` — UNDERVALUED / FAIR_VALUE / PREMIUM / OVERVALUED.
+
+The model uses the average of available 3-year EPS CAGR, 5-year EPS CAGR and current EPS growth, capped between -5% and +25% for the normalized growth assumption. It projects three years forward and discounts the resulting value back at 10%.
+
+Industry PE bands are used rather than today's PE alone. Semiconductor Equipment, for example, uses 25x / 30x / 35x for bear/base/bull. The result is a screening estimate, not a broker target price or a guarantee of intrinsic value. Missing or non-positive EPS/growth data leaves the fair-value fields blank.
+
 ## Structural-risk / value-trap detection
 
 The current V2.3 score uses the 100-point base model above, then applies a separate structural-risk penalty of up to 20 points. The report exposes the penalty instead of hiding it.
