@@ -642,6 +642,75 @@ def score_stock(row: dict) -> tuple:
 
     total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
+    # V2.8 valuation model: estimate fair value from normalized 3-year EPS growth
+    # rather than using today's PE alone. This is a screening estimate, not a
+    # price target. Bear/base/bull scenarios use conservative terminal PE bands.
+    current_price = _num(row.get("price"))
+    fair_value_bear = fair_value_base = fair_value_bull = None
+    margin_of_safety_price = None
+    fair_value_upside = None
+    fair_value_scenario = "UNAVAILABLE"
+
+    industry = str(row.get("industry", "") or "")
+    pe_bands = {
+        "Semiconductor Equipment": (25.0, 30.0, 35.0),
+        "Semiconductors": (22.0, 28.0, 34.0),
+        "Software": (24.0, 30.0, 36.0),
+        "IT Services": (20.0, 25.0, 30.0),
+        "Health Care Equipment": (24.0, 29.0, 34.0),
+        "Pharmaceuticals": (18.0, 23.0, 28.0),
+        "Biotechnology": (18.0, 24.0, 30.0),
+        "Machinery": (18.0, 23.0, 28.0),
+        "Electrical Equipment": (20.0, 25.0, 30.0),
+        "Financial Services": (14.0, 18.0, 22.0),
+        "Banks": (10.0, 13.0, 16.0),
+        "Financial Data & Exchanges": (22.0, 27.0, 32.0),
+        "Consumer Staples Distribution & Retail": (20.0, 24.0, 28.0),
+        "Beverages": (20.0, 24.0, 28.0),
+        "Oil, Gas & Consumable Fuels": (10.0, 14.0, 18.0),
+        "Electric Utilities": (14.0, 17.0, 20.0),
+        "Specialized REITs": (16.0, 19.0, 22.0),
+        "Industrial REITs": (16.0, 19.0, 22.0),
+        "Retail REITs": (16.0, 19.0, 22.0),
+    }
+
+    growth_candidates = [x for x in (eps_cagr_3y, eps_cagr_5y, eps_growth) if x is not None and math.isfinite(x)]
+    if eps is not None and eps > 0 and growth_candidates:
+        normalized_growth = max(-0.05, min(0.25, sum(growth_candidates) / len(growth_candidates)))
+        growth_pct = normalized_growth * 100
+        if industry in pe_bands:
+            bear_pe, base_pe, bull_pe = pe_bands[industry]
+        else:
+            base_pe = max(15.0, min(30.0, 20.0 + 0.40 * max(0.0, growth_pct)))
+            bear_pe, bull_pe = max(12.0, base_pe - 5.0), min(35.0, base_pe + 5.0)
+
+        bear_growth = max(-0.02, normalized_growth - 0.08)
+        base_growth = normalized_growth
+        bull_growth = min(0.30, normalized_growth + 0.08)
+        horizon = 3
+        discount_rate = 0.10
+
+        bear_eps = eps * (1.0 + bear_growth) ** horizon
+        base_eps = eps * (1.0 + base_growth) ** horizon
+        bull_eps = eps * (1.0 + bull_growth) ** horizon
+
+        # Discount the 3-year value back to today's dollars.
+        fair_value_bear = round(bear_eps * bear_pe / (1.0 + discount_rate) ** horizon, 2)
+        fair_value_base = round(base_eps * base_pe / (1.0 + discount_rate) ** horizon, 2)
+        fair_value_bull = round(bull_eps * bull_pe / (1.0 + discount_rate) ** horizon, 2)
+        margin_of_safety_price = round(fair_value_base * 0.80, 2)
+
+        if current_price is not None and current_price > 0:
+            fair_value_upside = round(fair_value_base / current_price - 1.0, 4)
+            if current_price <= margin_of_safety_price:
+                fair_value_scenario = "UNDERVALUED"
+            elif current_price <= fair_value_base:
+                fair_value_scenario = "FAIR_VALUE"
+            elif current_price <= fair_value_bull:
+                fair_value_scenario = "PREMIUM"
+            else:
+                fair_value_scenario = "OVERVALUED"
+
     # Never expose a misleading total score when fundamentals are stale,
     # unavailable, or errored. Component scores remain diagnostic only.
     if not fundamentals_verified:
@@ -702,5 +771,7 @@ def score_stock(row: dict) -> tuple:
         research_score, research_signal, research_confidence,
         recent_fundamental_score, recent_fundamental_data_quality,
         structural_risk_multiplier, dip_quality, candidate_score, candidate_signal,
-        fundamental_confidence
+        fundamental_confidence,
+        fair_value_bear, fair_value_base, fair_value_bull,
+        margin_of_safety_price, fair_value_upside, fair_value_scenario
     )
