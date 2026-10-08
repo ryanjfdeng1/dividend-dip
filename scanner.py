@@ -174,7 +174,7 @@ def main():
     rows, errors = [], []
     price_provider = "Tiingo (split-normalized)"
 
-    print(f"Quality Dip Scanner V2.7 | {len(STOCKS)} stocks")
+    print(f"Quality Dip Scanner V2.8 | {len(STOCKS)} stocks")
     print(f"Price data: {price_provider} | Fundamentals: SEC XBRL -> Tiingo fallback")
     print("Price cache: refresh at most once per trading day | Corporate actions: split-normalized")
     print("SEC fundamentals cache: refresh every 7 days | TTM + 3/5-year trend metrics")
@@ -333,6 +333,9 @@ def main():
         "value_trap_risk", "structural_risk_multiplier",
         "fundamental_confidence", "recent_fundamental_data_quality",
         "research_score", "research_signal", "research_confidence", "research_rank",
+        # ===== FAIR VALUE / VALUATION =====
+        "fair_value_bear", "fair_value_base", "fair_value_bull",
+        "margin_of_safety_price", "fair_value_upside", "fair_value_scenario",
         # ===== SUPPORTING MARKET / DIP CONTEXT =====
         "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
         "drawdown_3y", "return_3y", "trend_regime",
@@ -381,6 +384,7 @@ def main():
 
     readable = df[columns].copy()
     percent_columns = {
+        "fair_value_upside",
         "drawdown_100d", "drawdown_60d", "drawdown_20d", "drawdown_252d",
         "distance_200dma", "fcf_yield", "dividend_yield", "fcf_payout_ratio",
         "revenue_cagr_5y", "eps_cagr_5y", "fcf_cagr_5y", "margin_change_5y",
@@ -426,6 +430,7 @@ def main():
         "risk": PatternFill("solid", fgColor="FCE4D6"),
         "data": PatternFill("solid", fgColor="FFF2CC"),
         "research": PatternFill("solid", fgColor="E4DFEC"),
+        "valuation": PatternFill("solid", fgColor="DDEBF7"),
     }
     header_map = {cell.value: cell.column for cell in ws[1]}
     groups = {
@@ -434,6 +439,7 @@ def main():
         "risk": ["value_trap_risk", "structural_risk_multiplier"],
         "data": ["fundamental_confidence", "recent_fundamental_data_quality"],
         "research": ["research_score", "research_signal", "research_confidence", "research_rank"],
+        "valuation": ["fair_value_bear", "fair_value_base", "fair_value_bull", "margin_of_safety_price", "fair_value_upside", "fair_value_scenario"],
     }
     for group, names in groups.items():
         for name in names:
@@ -476,7 +482,7 @@ def main():
     for column_cells in ws.columns:
         letter = column_cells[0].column_letter
         header = str(column_cells[0].value or "")
-        if header in groups["candidate"] + groups["quality"] + groups["risk"] + groups["data"] + groups["research"]:
+        if header in groups["candidate"] + groups["quality"] + groups["risk"] + groups["data"] + groups["research"] + groups["valuation"]:
             width = min(max(len(header) + 2, 14), 28)
         elif header in ("ticker", "price", "sector", "industry", "trend_regime"):
             width = min(max(len(header) + 2, 12), 24)
