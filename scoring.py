@@ -473,7 +473,7 @@ def score_stock(row: dict) -> tuple:
     else:
         research_signal = "RESEARCH RISK"
 
-    # V2.7 candidate layer: target "recent drawdown + fundamentals intact".
+    # V2.8 candidate layer: target "recent drawdown + fundamentals intact + valuation discount".
     # This is intentionally independent from the legacy score.
     #
     # Candidate eligibility requires:
@@ -484,8 +484,9 @@ def score_stock(row: dict) -> tuple:
     #   * adequate research coverage and no HIGH value-trap classification
     #
     # Candidate score (100):
-    #   40 research quality + 25 recent fundamental stability
-    #   25 drawdown quality + 10 long-term price regime.
+    #   35 research quality + 20 recent fundamental stability
+    #   15 drawdown quality + 10 long-term price regime
+    #   20 valuation opportunity.
     candidate_score = None
     candidate_signal = "NOT_ELIGIBLE"
     recent_fundamental_score = None
@@ -565,83 +566,6 @@ def score_stock(row: dict) -> tuple:
     )
     trend_ok = row.get("trend_regime") in ("HEALTHY_TREND", "NORMAL_CORRECTION")
 
-    if (
-        fundamentals_verified
-        and fundamental_age is not None
-        and fundamental_age <= 120
-        and research_score is not None
-        and research_score >= 65
-        and research_confidence >= 75
-        and dd100 is not None
-        and dd100 <= -0.10
-        and trend_ok
-        and recent_fundamental_ok
-        and value_trap_risk != "HIGH"
-        and recent_fundamental_score is not None
-    ):
-        # 40 pts research quality.
-        quality_component = research_score * 0.40
-
-        # 25 pts recent fundamental stability. Missing inputs no longer
-        # silently become a perfect 25/25; the score is capped when coverage
-        # is incomplete.
-        fundamental_component = recent_fundamental_score
-        # Do not let normalized scores hide missing recent metrics.
-        if recent_fundamental_data_quality == "PARTIAL":
-            fundamental_component = min(fundamental_component, 22.0)
-        elif recent_fundamental_data_quality == "LIMITED":
-            fundamental_component = min(fundamental_component, 16.0)
-        elif recent_fundamental_data_quality == "COMPLETE":
-            fundamental_component = min(fundamental_component, 25.0)
-
-        # 25 pts drawdown: 10 pts at -10%, scaling to 25 pts at -30%.
-        dip_component = min(
-            25.0,
-            10.0 + max(0.0, (-dd100 - 0.10) / 0.20) * 15.0,
-        )
-
-        # 10 pts long-term price regime. A normal correction is still
-        # eligible, but receives less than a healthy long-term trend.
-        trend_component = 10.0 if row.get("trend_regime") == "HEALTHY_TREND" else 8.0
-
-        raw_candidate_score = (
-            quality_component
-            + fundamental_component
-            + dip_component
-            + trend_component
-        )
-        candidate_score = round(raw_candidate_score * structural_risk_multiplier, 1)
-
-        if candidate_score >= 82:
-            candidate_signal = "HIGH_QUALITY_DIP"
-        elif candidate_score >= 70:
-            candidate_signal = "QUALITY_DIP"
-        elif candidate_score >= 60:
-            candidate_signal = "WATCHLIST_DIP"
-        else:
-            candidate_signal = "WEAK_DIP"
-
-
-    # Human-readable classification of the drawdown itself.
-    if row.get("data_status") != "OK":
-        dip_quality = "DATA_REVIEW"
-    elif value_trap_risk == "HIGH":
-        dip_quality = "STRUCTURAL_RISK_DIP"
-    elif row.get("trend_regime") in ("MULTI_YEAR_DECLINE", "LONG_TERM_DOWNTREND"):
-        dip_quality = "LONG_TERM_DECLINE"
-    elif value_trap_risk == "MEDIUM":
-        dip_quality = "STRUCTURAL_RISK_DIP"
-    elif recent_fundamental_data_quality == "LIMITED":
-        dip_quality = "DATA_REVIEW"
-    elif recent_fundamental_ok and row.get("trend_regime") == "HEALTHY_TREND":
-        dip_quality = "HEALTHY_DIP" if dd100 > -0.25 else "DEEP_HEALTHY_DIP"
-    elif recent_fundamental_ok and row.get("trend_regime") == "NORMAL_CORRECTION":
-        dip_quality = "HEALTHY_DIP" if dd100 > -0.25 else "DEEP_HEALTHY_DIP"
-    else:
-        dip_quality = "FUNDAMENTAL_REVIEW"
-
-    total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
-
     # V2.8 valuation model: estimate fair value from normalized 3-year EPS growth
     # rather than using today's PE alone. This is a screening estimate, not a
     # price target. Bear/base/bull scenarios use conservative terminal PE bands.
@@ -710,6 +634,94 @@ def score_stock(row: dict) -> tuple:
                 fair_value_scenario = "PREMIUM"
             else:
                 fair_value_scenario = "OVERVALUED"
+
+
+    if (
+        fundamentals_verified
+        and fundamental_age is not None
+        and fundamental_age <= 120
+        and research_score is not None
+        and research_score >= 65
+        and research_confidence >= 75
+        and dd100 is not None
+        and dd100 <= -0.10
+        and trend_ok
+        and recent_fundamental_ok
+        and value_trap_risk != "HIGH"
+        and recent_fundamental_score is not None
+    ):
+        # Candidate Score V2.8 (100 points):
+        # 35 research quality + 20 recent fundamentals + 15 drawdown
+        # + 10 long-term regime + 20 valuation opportunity.
+        quality_component = research_score * 0.35
+
+        fundamental_component = recent_fundamental_score * 0.80
+        if recent_fundamental_data_quality == "PARTIAL":
+            fundamental_component = min(fundamental_component, 18.0)
+        elif recent_fundamental_data_quality == "LIMITED":
+            fundamental_component = min(fundamental_component, 13.0)
+        else:
+            fundamental_component = min(fundamental_component, 20.0)
+
+        # 15 pts drawdown: 6 pts at -10%, scaling to 15 pts at -30%.
+        dip_component = min(
+            15.0,
+            6.0 + max(0.0, (-dd100 - 0.10) / 0.20) * 9.0,
+        )
+
+        trend_component = 10.0 if row.get("trend_regime") == "HEALTHY_TREND" else 8.0
+
+        # 20 pts valuation opportunity. Full credit requires a >=20%
+        # discount to base fair value; no credit when price is above base fair
+        # value. This keeps "cheapness" separate from business quality.
+        valuation_opportunity_component = 0.0
+        if fair_value_base is not None and current_price is not None and current_price > 0:
+            discount_to_fair = fair_value_base / current_price - 1.0
+            if discount_to_fair >= 0.20:
+                valuation_opportunity_component = 20.0
+            elif discount_to_fair >= 0.0:
+                valuation_opportunity_component = 20.0 * (discount_to_fair / 0.20)
+            elif discount_to_fair >= -0.20:
+                valuation_opportunity_component = 20.0 * ((discount_to_fair + 0.20) / 0.20)
+
+        raw_candidate_score = (
+            quality_component
+            + fundamental_component
+            + dip_component
+            + trend_component
+            + valuation_opportunity_component
+        )
+        candidate_score = round(raw_candidate_score * structural_risk_multiplier, 1)
+
+        if candidate_score >= 82:
+            candidate_signal = "HIGH_QUALITY_DIP"
+        elif candidate_score >= 70:
+            candidate_signal = "QUALITY_DIP"
+        elif candidate_score >= 60:
+            candidate_signal = "WATCHLIST_DIP"
+        else:
+            candidate_signal = "WEAK_DIP"
+
+
+    # Human-readable classification of the drawdown itself.
+    if row.get("data_status") != "OK":
+        dip_quality = "DATA_REVIEW"
+    elif value_trap_risk == "HIGH":
+        dip_quality = "STRUCTURAL_RISK_DIP"
+    elif row.get("trend_regime") in ("MULTI_YEAR_DECLINE", "LONG_TERM_DOWNTREND"):
+        dip_quality = "LONG_TERM_DECLINE"
+    elif value_trap_risk == "MEDIUM":
+        dip_quality = "STRUCTURAL_RISK_DIP"
+    elif recent_fundamental_data_quality == "LIMITED":
+        dip_quality = "DATA_REVIEW"
+    elif recent_fundamental_ok and row.get("trend_regime") == "HEALTHY_TREND":
+        dip_quality = "HEALTHY_DIP" if dd100 > -0.25 else "DEEP_HEALTHY_DIP"
+    elif recent_fundamental_ok and row.get("trend_regime") == "NORMAL_CORRECTION":
+        dip_quality = "HEALTHY_DIP" if dd100 > -0.25 else "DEEP_HEALTHY_DIP"
+    else:
+        dip_quality = "FUNDAMENTAL_REVIEW"
+
+    total = max(0, min(100, quality + trend_score + valuation + dip + dividend - structural_penalty))
 
     # Never expose a misleading total score when fundamentals are stale,
     # unavailable, or errored. Component scores remain diagnostic only.
